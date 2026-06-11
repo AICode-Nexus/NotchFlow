@@ -1,0 +1,4 @@
+module CSMCParamStruct {
+    header "../SMCParamStruct.h"
+    export *
+}

@@ -1,0 +1,311 @@
+import Foundation
+import Darwin
+import notify
+
+enum ChargeLimitState: Equatable {
+    case idle
+    case monitoring
+    case chargingDisabled
+    case helperNotInstalled
+    case unsupported
+    case error(String)
+
+    var displayText: String {
+        switch self {
+        case .idle:
+            return "未启用"
+        case .monitoring:
+            return "监控中，正常充电"
+        case .chargingDisabled:
+            return "已暂停充电"
+        case .helperNotInstalled:
+            return "需要安装 Helper"
+        case .unsupported:
+            return "设备不支持"
+        case .error(let msg):
+            return "错误：\(msg)"
+        }
+    }
+}
+
+@MainActor
+final class ChargeLimitService: ObservableObject {
+    @Published private(set) var state: ChargeLimitState = .idle
+    @Published private(set) var currentPercent: Int = 0
+    @Published private(set) var isHelperInstalled: Bool = false
+
+    private let settings: AppSettings
+    private var notifyToken: Int32 = 0
+    private var isRegistered = false
+
+    init(settings: AppSettings) {
+        self.settings = settings
+        self.isHelperInstalled = helperInstalled()
+    }
+
+    func start() {
+        isHelperInstalled = helperInstalled()
+
+        guard settings.chargeLimitEnabled else {
+            unregisterPercentNotification()
+            state = .idle
+            return
+        }
+
+        guard isHelperInstalled else {
+            unregisterPercentNotification()
+            state = helperSourcePath() == nil ? .error("未找到 Helper 可执行文件") : .helperNotInstalled
+            return
+        }
+
+        guard helperSupportsChargeControl() else {
+            unregisterPercentNotification()
+            settings.chargeLimitEnabled = false
+            state = .unsupported
+            return
+        }
+
+        registerPercentNotification()
+    }
+
+    func stop() {
+        unregisterPercentNotification()
+        if state == .chargingDisabled {
+            restoreCharging()
+        }
+        state = .idle
+    }
+
+    func toggle() {
+        setEnabled(!settings.chargeLimitEnabled)
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        if enabled {
+            isHelperInstalled = helperInstalled()
+
+            guard isHelperInstalled else {
+                settings.chargeLimitEnabled = false
+                state = helperSourcePath() == nil ? .error("未找到 Helper 可执行文件") : .helperNotInstalled
+                return
+            }
+
+            guard helperSupportsChargeControl() else {
+                settings.chargeLimitEnabled = false
+                state = .unsupported
+                return
+            }
+
+            settings.chargeLimitEnabled = true
+            start()
+            return
+        }
+
+        settings.chargeLimitEnabled = false
+        stop()
+    }
+
+    func installHelper() {
+        guard let source = helperSourcePath() else {
+            state = .error("未找到 Helper 可执行文件")
+            return
+        }
+
+        let dest = installedHelperPath()
+
+        guard !FileManager.default.isExecutableFile(atPath: dest) else {
+            isHelperInstalled = true
+            if state == .helperNotInstalled {
+                start()
+            }
+            return
+        }
+
+        let script = """
+        do shell script "mkdir -p '\(shellEscaped("/usr/local/bin"))' && cp '\(shellEscaped(source))' '\(shellEscaped(dest))' && chown root:wheel '\(shellEscaped(dest))' && chmod 4755 '\(shellEscaped(dest))'" with administrator privileges
+        """
+        let output = runAppleScript(script)
+
+        isHelperInstalled = helperInstalled()
+        if isHelperInstalled {
+            if settings.chargeLimitEnabled {
+                start()
+            } else {
+                state = .idle
+            }
+        } else if output.hasPrefix("error:") {
+            state = .error("安装 Helper 失败")
+        }
+    }
+
+    private func registerPercentNotification() {
+        guard !isRegistered else { return }
+
+        let status = notify_register_dispatch(
+            "com.apple.system.powersources.percent",
+            &notifyToken,
+            DispatchQueue.main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handlePercentChange()
+            }
+        }
+
+        guard status == NOTIFY_STATUS_OK else {
+            state = .error("无法注册电量通知")
+            return
+        }
+
+        isRegistered = true
+        handlePercentChange()
+    }
+
+    private func unregisterPercentNotification() {
+        guard isRegistered else { return }
+        notify_cancel(notifyToken)
+        notifyToken = 0
+        isRegistered = false
+    }
+
+    private func handlePercentChange() {
+        var token: Int32 = 0
+        let status = notify_register_check("com.apple.system.powersources.percent", &token)
+        guard status == NOTIFY_STATUS_OK else { return }
+
+        var packedBits: UInt64 = 0
+        notify_get_state(token, &packedBits)
+        notify_cancel(token)
+
+        let validBit: UInt64 = 1 << 19
+        guard (packedBits & validBit) != 0 else { return }
+
+        let percent = Int(min(packedBits & 0xFF, 100))
+        currentPercent = percent
+
+        let maxCharge = settings.chargeLimitMax
+        let minCharge = settings.chargeLimitMin
+
+        if percent >= maxCharge && state != .chargingDisabled {
+            disableCharging()
+        } else if percent < minCharge && state == .chargingDisabled {
+            enableCharging()
+        } else if state != .chargingDisabled {
+            state = .monitoring
+        }
+    }
+
+    private func disableCharging() {
+        let output = runHelperCommand("disable-charging")
+        if !output.contains("error") {
+            state = .chargingDisabled
+        } else {
+            state = .error("禁止充电失败")
+        }
+    }
+
+    private func enableCharging() {
+        let output = runHelperCommand("enable-charging")
+        if !output.contains("error") {
+            state = .monitoring
+        } else {
+            state = .error("恢复充电失败")
+        }
+    }
+
+    private func restoreCharging() {
+        _ = runHelperCommand("enable-charging")
+    }
+
+    private func helperSupportsChargeControl() -> Bool {
+        let output = runHelperCommand("status")
+        if output.hasPrefix("error:") {
+            state = .error("无法检测设备支持状态")
+            return false
+        }
+
+        return output.contains(#""supported":true"#)
+    }
+
+    private func runHelperCommand(_ command: String) -> String {
+        let path = installedHelperPath()
+        guard FileManager.default.isExecutableFile(atPath: path) else {
+            return "error: helper not installed"
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = [command]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return "error: \(error.localizedDescription)"
+        }
+        if process.terminationStatus != 0 {
+            return "error: exit code \(process.terminationStatus)"
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    @discardableResult
+    private func runAppleScript(_ source: String) -> String {
+        var error: NSDictionary?
+        let script = NSAppleScript(source: source)
+        let result = script?.executeAndReturnError(&error)
+        if let error = error {
+            let msg = error[NSAppleScript.errorMessage] as? String ?? "未知错误"
+            if !msg.contains("User canceled") {
+                return "error: \(msg)"
+            }
+            return ""
+        }
+        return result?.stringValue ?? ""
+    }
+
+    private func helperInstalled() -> Bool {
+        FileManager.default.isExecutableFile(atPath: installedHelperPath())
+    }
+
+    private func installedHelperPath() -> String {
+        "/usr/local/bin/notchflow-smc-helper"
+    }
+
+    private func helperSourcePath() -> String? {
+        for candidate in helperSourceCandidates() where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+
+        return nil
+    }
+
+    private func helperSourceCandidates() -> [String] {
+        var candidates: [String] = []
+
+        if let bundlePath = Bundle.main.path(forResource: "notchflow-smc-helper", ofType: nil) {
+            candidates.append(bundlePath)
+        }
+
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        candidates.append(currentDirectory.appendingPathComponent(".build/debug/notchflow-smc-helper").path)
+        candidates.append(currentDirectory.appendingPathComponent(".build/arm64-apple-macosx/debug/notchflow-smc-helper").path)
+
+        let sourceFileURL = URL(fileURLWithPath: #filePath)
+        let projectRoot = sourceFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        candidates.append(projectRoot.appendingPathComponent(".build/debug/notchflow-smc-helper").path)
+        candidates.append(projectRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/notchflow-smc-helper").path)
+
+        return Array(NSOrderedSet(array: candidates)) as? [String] ?? candidates
+    }
+
+    private func shellEscaped(_ path: String) -> String {
+        path.replacingOccurrences(of: "'", with: "'\"'\"'")
+    }
+}

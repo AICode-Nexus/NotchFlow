@@ -1,0 +1,14 @@
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Local build logs
+build_output.log
+build_output.txt
