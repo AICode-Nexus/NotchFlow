@@ -19,6 +19,7 @@ target = project.new_target(:application, PROJECT_NAME, :osx, DEPLOYMENT_TARGET)
 target.product_name = PROJECT_NAME
 
 info_plist_ref = project.main_group.new_file('App/Info.plist')
+project.main_group.new_file('App/NotchFlow.entitlements')
 
 sources_group = project.main_group.find_subpath('Sources', true)
 source_refs = Dir.glob(ROOT.join('Sources/NotchFlow/**/*.swift')).sort.map do |path|
@@ -40,9 +41,11 @@ end
 framework_paths = [
   '/System/Library/Frameworks/AppKit.framework',
   '/System/Library/Frameworks/Carbon.framework',
+  '/System/Library/Frameworks/CoreLocation.framework',
   '/System/Library/Frameworks/IOKit.framework',
   '/System/Library/Frameworks/ServiceManagement.framework',
   '/System/Library/Frameworks/SwiftUI.framework',
+  '/System/Library/Frameworks/WeatherKit.framework',
 ]
 
 framework_refs = framework_paths.map do |path|
@@ -52,8 +55,36 @@ framework_refs.each do |ref|
   target.frameworks_build_phase.add_file_reference(ref, true)
 end
 
+helper_phase = target.new_shell_script_build_phase('Build SMC Helper')
+helper_phase.shell_script = <<~SH
+  set -euo pipefail
+  cd "$SRCROOT"
+
+  case "$CONFIGURATION" in
+      Release)
+          SWIFT_CONFIGURATION=release
+          ;;
+      *)
+          SWIFT_CONFIGURATION=debug
+          ;;
+  esac
+
+  /usr/bin/xcrun swift build -c "$SWIFT_CONFIGURATION" --product notchflow-smc-helper
+  HELPER_BIN_DIR=`/usr/bin/xcrun swift build -c "$SWIFT_CONFIGURATION" --product notchflow-smc-helper --show-bin-path`
+  DESTINATION_DIR="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+  DESTINATION="$DESTINATION_DIR/notchflow-smc-helper"
+
+  /bin/mkdir -p "$DESTINATION_DIR"
+  /bin/cp "$HELPER_BIN_DIR/notchflow-smc-helper" "$DESTINATION"
+  /bin/chmod 755 "$DESTINATION"
+SH
+helper_phase.output_paths = [
+  '$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/notchflow-smc-helper',
+]
+
 target.build_configurations.each do |config|
   settings = config.build_settings
+  settings['CODE_SIGN_ENTITLEMENTS'] = 'App/NotchFlow.entitlements'
   settings['INFOPLIST_FILE'] = info_plist_ref.path
   settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.notchflow.app'
   settings['PRODUCT_NAME'] = '$(TARGET_NAME)'

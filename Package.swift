@@ -39,5 +39,9 @@ let package = Package(
                 .linkedFramework("IOKit"),
             ]
         ),
+        .testTarget(
+            name: "NotchFlowTests",
+            dependencies: ["NotchFlow"]
+        ),
     ]
 )

@@ -23,7 +23,7 @@ final class GlobalHotKeyManager {
             return
         }
 
-        var hotKeyID = EventHotKeyID(
+        let hotKeyID = EventHotKeyID(
             signature: OSType(UInt32(truncatingIfNeeded: "NTHF".fourCharCodeValue)),
             id: 1
         )

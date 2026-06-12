@@ -16,6 +16,10 @@
 		2E06D6FA510A65C0D174F950 /* ClipboardHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FB901907A0439A30121EDD6 /* ClipboardHistoryService.swift */; };
 		371D81C3D7389DE723830523 /* MusicAppleScriptBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A1670614A85901FDA983806 /* MusicAppleScriptBridge.swift */; };
 		3840747908766D6959AE68CB /* ScriptShortcutsSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE4A3067D58A72A2E9EB547 /* ScriptShortcutsSettingsSection.swift */; };
+		C0DEF1000000000000000001 /* CoreLocation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000004 /* CoreLocation.framework */; };
+		C0DEF1000000000000000002 /* WeatherKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000005 /* WeatherKit.framework */; };
+		C0DEF1000000000000000007 /* CompactWeatherBatteryPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */; };
+		C0DEF1000000000000000009 /* AITokenUsageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF100000000000000000A /* AITokenUsageService.swift */; };
 		5D80A695687A15D49A6D8084 /* WallpaperRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D660B2722ED9C41AEE9576 /* WallpaperRefreshService.swift */; };
 		668C10665E6C77431AC78520 /* BatteryStatusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DAE1AD9A5F692D642E1B8B /* BatteryStatusService.swift */; };
 		738BC539792A9C7996ADCF34 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EE8D9876740F4498018967 /* MenuBarContentView.swift */; };
@@ -65,6 +69,11 @@
 		956539AF709124E758B56E14 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = App/Info.plist; sourceTree = "<group>"; };
 		9FB901907A0439A30121EDD6 /* ClipboardHistoryService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClipboardHistoryService.swift; path = Sources/NotchFlow/Services/ClipboardHistoryService.swift; sourceTree = "<group>"; };
 		A8499303CA7C88CC7479DA07 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = ../../../../System/Library/Frameworks/IOKit.framework; sourceTree = "<group>"; };
+		C0DEF1000000000000000003 /* NotchFlow.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = NotchFlow.entitlements; path = App/NotchFlow.entitlements; sourceTree = "<group>"; };
+		C0DEF1000000000000000004 /* CoreLocation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreLocation.framework; path = ../../../../System/Library/Frameworks/CoreLocation.framework; sourceTree = "<group>"; };
+		C0DEF1000000000000000005 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = ../../../../System/Library/Frameworks/WeatherKit.framework; sourceTree = "<group>"; };
+		C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompactWeatherBatteryPresentation.swift; path = Sources/NotchFlow/UI/CompactWeatherBatteryPresentation.swift; sourceTree = "<group>"; };
+		C0DEF100000000000000000A /* AITokenUsageService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AITokenUsageService.swift; path = Sources/NotchFlow/Services/AITokenUsageService.swift; sourceTree = "<group>"; };
 		AD65C9F5DD564C7F01A04FD3 /* NotchPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotchPanelView.swift; path = Sources/NotchFlow/UI/NotchPanelView.swift; sourceTree = "<group>"; };
 		BDFA46DA6C5DC16B3DCD49A9 /* EffectsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EffectsView.swift; path = Sources/NotchFlow/UI/EffectsView.swift; sourceTree = "<group>"; };
 		C30B68F20D369283B0A2BCE3 /* NowPlayingSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NowPlayingSnapshot.swift; path = Sources/NotchFlow/Models/NowPlayingSnapshot.swift; sourceTree = "<group>"; };
@@ -86,9 +95,11 @@
 				18C58979D9DEBEBFBCD594A4 /* Cocoa.framework in Frameworks */,
 				DDA07C787940DECB1B98EA4E /* AppKit.framework in Frameworks */,
 				77C2D2A3C41C32967075D0E6 /* Carbon.framework in Frameworks */,
+				C0DEF1000000000000000001 /* CoreLocation.framework in Frameworks */,
 				A7853FA525E1AB99E543D850 /* IOKit.framework in Frameworks */,
 				85392A3689AE61921A23152F /* ServiceManagement.framework in Frameworks */,
 				F5AE150EFA3228CE1EAD5D38 /* SwiftUI.framework in Frameworks */,
+				C0DEF1000000000000000002 /* WeatherKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -105,6 +116,7 @@
 				65B849B4E4F0F72E64EADF81 /* ScriptShortcut.swift */,
 				63819A5609E890E962050D3F /* NotchFlowApp.swift */,
 				009637C31375F5FCDB39B8F0 /* NotchFlowAppModel.swift */,
+				C0DEF100000000000000000A /* AITokenUsageService.swift */,
 				09DAE1AD9A5F692D642E1B8B /* BatteryStatusService.swift */,
 				FB5A42971CC85AA9CDDCDD73 /* ChargeLimitService.swift */,
 				9FB901907A0439A30121EDD6 /* ClipboardHistoryService.swift */,
@@ -117,6 +129,7 @@
 				C49C29A6D073BE1300FF90F2 /* NowPlayingService.swift */,
 				D7537D8A328CB6142345B179 /* ScriptShortcutStore.swift */,
 				E4D660B2722ED9C41AEE9576 /* WallpaperRefreshService.swift */,
+				C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */,
 				BDFA46DA6C5DC16B3DCD49A9 /* EffectsView.swift */,
 				50EE8D9876740F4498018967 /* MenuBarContentView.swift */,
 				AD65C9F5DD564C7F01A04FD3 /* NotchPanelView.swift */,
@@ -132,6 +145,7 @@
 				FF80A2D4F5D07AE3764716CC /* Products */,
 				A502A96C477265046EB2CFC9 /* Frameworks */,
 				956539AF709124E758B56E14 /* Info.plist */,
+				C0DEF1000000000000000003 /* NotchFlow.entitlements */,
 				2BFE68EAE4244FF68C570A9A /* Sources */,
 				D06F3ABF579CCEB07E6A0D05 /* Docs */,
 			);
@@ -143,9 +157,11 @@
 				C31EA1DC9116CCA2364FE84C /* OS X */,
 				8A933A2261AA4405961CE4A7 /* AppKit.framework */,
 				92BBD9C49ED186A24A33F345 /* Carbon.framework */,
+				C0DEF1000000000000000004 /* CoreLocation.framework */,
 				A8499303CA7C88CC7479DA07 /* IOKit.framework */,
 				5FD522D023D3858BB13FCDF2 /* ServiceManagement.framework */,
 				DC70F502B13890EF1C51A98E /* SwiftUI.framework */,
+				C0DEF1000000000000000005 /* WeatherKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -187,6 +203,7 @@
 				7C5BBB682DD38BC4C6933ECE /* Sources */,
 				6EFA6202E146B97B92125CF6 /* Frameworks */,
 				909D1278AFCAC4AED6BC8272 /* Resources */,
+				C0DEF1000000000000000006 /* Build SMC Helper */,
 			);
 			buildRules = (
 			);
@@ -238,6 +255,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		C0DEF1000000000000000006 /* Build SMC Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 0;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build SMC Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/notchflow-smc-helper",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\ncd \"$SRCROOT\"\n\ncase \"$CONFIGURATION\" in\n    Release)\n        SWIFT_CONFIGURATION=release\n        ;;\n    *)\n        SWIFT_CONFIGURATION=debug\n        ;;\nesac\n\n/usr/bin/xcrun swift build -c \"$SWIFT_CONFIGURATION\" --product notchflow-smc-helper\nHELPER_BIN_DIR=`/usr/bin/xcrun swift build -c \"$SWIFT_CONFIGURATION\" --product notchflow-smc-helper --show-bin-path`\nDESTINATION_DIR=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nDESTINATION=\"$DESTINATION_DIR/notchflow-smc-helper\"\n\n/bin/mkdir -p \"$DESTINATION_DIR\"\n/bin/cp \"$HELPER_BIN_DIR/notchflow-smc-helper\" \"$DESTINATION\"\n/bin/chmod 755 \"$DESTINATION\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		7C5BBB682DD38BC4C6933ECE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -250,6 +290,7 @@
 				15273641D60C902F3115436D /* ScriptShortcut.swift in Sources */,
 				C00231AA503E722D93F7B2A4 /* NotchFlowApp.swift in Sources */,
 				BC3B48C87F879BE3A42FA23E /* NotchFlowAppModel.swift in Sources */,
+				C0DEF1000000000000000009 /* AITokenUsageService.swift in Sources */,
 				668C10665E6C77431AC78520 /* BatteryStatusService.swift in Sources */,
 				080BAB5583B42A36CE3D27FB /* ChargeLimitService.swift in Sources */,
 				2E06D6FA510A65C0D174F950 /* ClipboardHistoryService.swift in Sources */,
@@ -262,6 +303,7 @@
 				87A36B785577875E0B1D89D8 /* NowPlayingService.swift in Sources */,
 				A89D9AA93A5E36325DBAFF71 /* ScriptShortcutStore.swift in Sources */,
 				5D80A695687A15D49A6D8084 /* WallpaperRefreshService.swift in Sources */,
+				C0DEF1000000000000000007 /* CompactWeatherBatteryPresentation.swift in Sources */,
 				86AD7651FF212C1C763BDE42 /* EffectsView.swift in Sources */,
 				738BC539792A9C7996ADCF34 /* MenuBarContentView.swift in Sources */,
 				02E64D7A0A56BF3FADC744F8 /* NotchPanelView.swift in Sources */,
@@ -275,12 +317,13 @@
 /* Begin XCBuildConfiguration section */
 		22790CF005697B2B9476DEE7 /* Release */ = {
 			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
+				buildSettings = {
+					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+					CLANG_ENABLE_MODULES = YES;
+					CODE_SIGN_ENTITLEMENTS = App/NotchFlow.entitlements;
+					CODE_SIGN_STYLE = Automatic;
+					COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -416,9 +459,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_STYLE = Automatic;
+					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+					CLANG_ENABLE_MODULES = YES;
+					CODE_SIGN_ENTITLEMENTS = App/NotchFlow.entitlements;
+					CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";

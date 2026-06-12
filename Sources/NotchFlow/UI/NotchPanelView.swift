@@ -175,11 +175,15 @@ struct NotchPanelStyle {
     }
 
     var panelShadowColor: Color {
-        if isDarkMode {
-            return .black.opacity(isAttachedToNotch ? 0.10 : 0.18)
+        if isAttachedToNotch {
+            return .clear
         }
 
-        return .black.opacity(isAttachedToNotch ? 0.08 : 0.12)
+        if isDarkMode {
+            return .black.opacity(0.18)
+        }
+
+        return .black.opacity(0.12)
     }
 
     var panelMaterial: NSVisualEffectView.Material {
@@ -298,6 +302,7 @@ struct NotchPanelView: View {
     @ObservedObject var scriptShortcuts: ScriptShortcutStore
     @ObservedObject var localAppSearch: LocalAppSearchService
     @ObservedObject var chargeLimit: ChargeLimitService
+    @ObservedObject var aiTokenUsage: AITokenUsageService
     @State private var isClipboardListPresented = false
     @State private var isQuickLaunchEditing = false
     @State private var draggedQuickLaunchShortcutID: UUID?
@@ -374,6 +379,10 @@ struct NotchPanelView: View {
         moduleUnitSize
     }
 
+    private var aiTokenUsageModuleWidth: CGFloat {
+        moduleUnitSize * 1.5
+    }
+
     private var quickLaunchUsesCarouselLayout: Bool {
         settings.quickLaunchLayoutMode == .carousel
     }
@@ -399,6 +408,7 @@ struct NotchPanelView: View {
             shouldShowWeatherSection ? weatherModuleWidth : nil,
             shouldShowBatterySection ? batteryModuleWidth : nil,
             shouldShowWallpaperSection ? wallpaperModuleWidth : nil,
+            shouldShowAITokenUsageSection ? aiTokenUsageModuleWidth : nil,
             shouldShowClipboardSection ? clipboardModuleWidth : nil,
             shouldShowQuickLaunchSection ? quickLaunchModuleWidth : nil,
         ].compactMap { $0 }
@@ -418,6 +428,7 @@ struct NotchPanelView: View {
             shouldShowWeatherSection ? "weather" : nil,
             shouldShowBatterySection ? "battery" : nil,
             shouldShowWallpaperSection ? "wallpaper" : nil,
+            shouldShowAITokenUsageSection ? "aiUsage" : nil,
             shouldShowClipboardSection ? "clipboard" : nil,
             shouldShowQuickLaunchSection ? "quickLaunch" : nil,
             quickLaunchUsesCarouselLayout ? "carousel" : "grid",
@@ -428,6 +439,9 @@ struct NotchPanelView: View {
             "\(clipboardHistory.entries.count)",
             wallpaper.lastWallpaperName ?? "none",
             wallpaper.statusMessage,
+            "\(aiTokenUsage.todayTotalTokens)",
+            aiTokenUsage.statusMessage,
+            aiTokenUsage.isRefreshing ? "aiRefreshing" : nil,
             "\(scriptShortcuts.shortcuts.count)",
         ]
             .compactMap { $0 }
@@ -446,6 +460,7 @@ struct NotchPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .background(Color.clear)
         .preferredColorScheme(style.preferredColorScheme)
         .onHover { isHovering in
             panelController.hoverChanged(isHovering: isHovering)
@@ -669,6 +684,11 @@ struct NotchPanelView: View {
 
             if shouldShowWallpaperSection {
                 wallpaperSection
+                    .transition(moduleCardTransition)
+            }
+
+            if shouldShowAITokenUsageSection {
+                aiTokenUsageSection
                     .transition(moduleCardTransition)
             }
 
@@ -1026,6 +1046,95 @@ struct NotchPanelView: View {
             .foregroundStyle(moduleSecondaryTextColor)
             .disabled(wallpaper.isRefreshing)
         }
+    }
+
+    private var aiTokenUsageSection: some View {
+        moduleCard(width: aiTokenUsageModuleWidth) {
+            moduleHeader("AI 用量", systemImage: "sparkles") {
+                if aiTokenUsage.isRefreshing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(moduleSecondaryTextColor)
+                        .scaleEffect(0.65)
+                } else {
+                    Button {
+                        aiTokenUsage.refresh()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(panelFont(11, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(moduleSecondaryTextColor)
+                    .help("刷新 AI token 用量")
+                }
+            }
+
+            Spacer(minLength: 6)
+
+            if aiTokenUsage.todayTotalTokens > 0 {
+                Text(AITokenUsageFormatter.tokenCount(aiTokenUsage.todayTotalTokens))
+                    .font(panelFont(26, weight: .bold))
+                    .foregroundStyle(modulePrimaryTextColor)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text("今日总 token")
+                    .font(panelFont(12, weight: .semibold))
+                    .foregroundStyle(moduleSecondaryTextColor)
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                aiTokenUsageSourceStrip
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    Spacer(minLength: 0)
+
+                    Image(systemName: aiTokenUsage.isRefreshing ? "hourglass" : "chart.bar.doc.horizontal")
+                        .font(panelFont(18, weight: .medium))
+                        .foregroundStyle(moduleTertiaryTextColor)
+
+                    Text(aiTokenUsage.isRefreshing ? "正在读取记录" : "暂无今日记录")
+                        .font(panelFont(12, weight: .semibold))
+                        .foregroundStyle(modulePrimaryTextColor)
+                        .lineLimit(1)
+
+                    Text(aiTokenUsage.statusMessage)
+                        .font(panelFont(12, weight: .medium))
+                        .foregroundStyle(moduleSecondaryTextColor)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var aiTokenUsageSourceStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(aiTokenUsage.summary.sourceSummaries(on: Date()).prefix(2))) { source in
+                HStack(spacing: 4) {
+                    Text(source.displayName)
+                        .font(panelFont(11, weight: .semibold))
+                        .lineLimit(1)
+
+                    Text(AITokenUsageFormatter.tokenCount(source.breakdown.totalTokens))
+                        .font(panelFont(11, weight: .medium))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                .foregroundStyle(moduleSecondaryTextColor)
+                .padding(.horizontal, 6)
+                .frame(height: 22)
+                .background(moduleTileBackgroundColor, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(height: 22)
     }
 
     private var clipboardHistoryPopover: some View {
@@ -1750,11 +1859,6 @@ struct NotchPanelView: View {
             Circle()
                 .fill(nowPlaying.snapshot.isPlaying ? style.positiveIndicatorColor : style.inactiveIndicatorColor)
                 .frame(width: 7, height: 7)
-        } else if settings.weatherEnabled, weather.isLoading {
-            ProgressView()
-                .controlSize(.mini)
-                .tint(panelSecondaryTextColor)
-                .scaleEffect(0.6)
         } else if settings.weatherEnabled, weather.snapshot.hasContent {
             Image(systemName: "location.fill")
                 .font(panelFont(9, weight: .semibold))
@@ -1768,6 +1872,20 @@ struct NotchPanelView: View {
             Image(systemName: "bolt.fill")
                 .font(panelFont(10, weight: .semibold))
                 .foregroundStyle(batteryRingColor.opacity(0.9))
+        } else if settings.weatherEnabled, weather.isLoading {
+            ProgressView()
+                .controlSize(.mini)
+                .tint(panelSecondaryTextColor)
+                .scaleEffect(0.6)
+        } else if settings.aiTokenUsageEnabled, aiTokenUsage.isRefreshing {
+            ProgressView()
+                .controlSize(.mini)
+                .tint(panelSecondaryTextColor)
+                .scaleEffect(0.6)
+        } else if settings.aiTokenUsageEnabled, aiTokenUsage.todayTotalTokens > 0 {
+            Image(systemName: "sparkles")
+                .font(panelFont(10, weight: .semibold))
+                .foregroundStyle(panelSecondaryTextColor)
         } else if settings.clipboardHistoryEnabled, !clipboardHistory.entries.isEmpty {
             Text("\(clipboardHistory.entries.count)")
                 .font(panelFont(12, weight: .semibold))
@@ -1790,12 +1908,17 @@ struct NotchPanelView: View {
             return "waveform"
         }
 
-        if settings.weatherEnabled {
-            return weather.snapshot.symbolName
+        if let weatherBatterySymbol = CompactWeatherBatteryPresentation.symbolName(
+            weatherEnabled: settings.weatherEnabled,
+            weatherSnapshot: weather.snapshot,
+            batteryEnabled: settings.deviceBatteryEnabled,
+            primaryBattery: primaryBatterySnapshot
+        ) {
+            return weatherBatterySymbol
         }
 
-        if settings.deviceBatteryEnabled, primaryBatterySnapshot != nil {
-            return batteryCenterSymbolName
+        if settings.aiTokenUsageEnabled {
+            return "sparkles"
         }
 
         if settings.clipboardHistoryEnabled, !clipboardHistory.entries.isEmpty {
@@ -1818,22 +1941,24 @@ struct NotchPanelView: View {
             return nowPlaying.snapshot.title
         }
 
-        if settings.weatherEnabled {
-            if weather.snapshot.hasContent {
-                return "\(formattedTemperature(weather.snapshot.temperature)) · \(weather.snapshot.conditionName)"
-            }
-
-            return weather.statusMessage
+        if let weatherBatteryTitle = CompactWeatherBatteryPresentation.title(
+            weatherEnabled: settings.weatherEnabled,
+            weatherSnapshot: weather.snapshot,
+            weatherStatusMessage: weather.statusMessage,
+            batteryEnabled: settings.deviceBatteryEnabled,
+            primaryBattery: primaryBatterySnapshot,
+            accessoryCount: battery.snapshot.accessoryCount
+        ) {
+            return weatherBatteryTitle
         }
 
-        if settings.deviceBatteryEnabled, let primaryBattery = primaryBatterySnapshot {
-            if battery.snapshot.accessoryCount > 0 {
-                return "\(primaryBattery.percentageText) · \(battery.snapshot.accessoryCount) 个外设"
+        if settings.aiTokenUsageEnabled {
+            let todayTotal = aiTokenUsage.todayTotalTokens
+            if todayTotal > 0 {
+                return "今日 AI \(AITokenUsageFormatter.tokenCount(todayTotal)) token"
             }
 
-            return primaryBattery.isCharging
-                ? "正在充电 · \(primaryBattery.percentageText)"
-                : "电量 \(primaryBattery.percentageText)"
+            return aiTokenUsage.statusMessage
         }
 
         if scriptShortcuts.shortcuts.count == 1,
@@ -1885,8 +2010,17 @@ struct NotchPanelView: View {
         settings.wallpaperRefreshEnabled
     }
 
+    private var shouldShowAITokenUsageSection: Bool {
+        settings.aiTokenUsageEnabled
+    }
+
     private var shouldShowModuleRow: Bool {
-        shouldShowWeatherSection || shouldShowBatterySection || shouldShowWallpaperSection || shouldShowClipboardSection || shouldShowQuickLaunchSection
+        shouldShowWeatherSection
+            || shouldShowBatterySection
+            || shouldShowWallpaperSection
+            || shouldShowAITokenUsageSection
+            || shouldShowClipboardSection
+            || shouldShowQuickLaunchSection
     }
 
     private var isSearchingApps: Bool {

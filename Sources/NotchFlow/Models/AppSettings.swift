@@ -121,6 +121,7 @@ final class AppSettings: ObservableObject {
         static let panelAppearanceMode = "PanelAppearanceMode"
         static let panelTextSizePreset = "PanelTextSizePreset"
         static let chargeLimitEnabled = "ChargeLimitEnabled"
+        static let aiTokenUsageEnabled = "AITokenUsageEnabled"
     }
 
     @Published var hoverToExpand: Bool {
@@ -201,6 +202,12 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var aiTokenUsageEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(aiTokenUsageEnabled, forKey: Keys.aiTokenUsageEnabled)
+        }
+    }
+
     let chargeLimitMax: Int = 80
     let chargeLimitMin: Int = 75
 
@@ -259,6 +266,10 @@ final class AppSettings: ObservableObject {
             defaults.set(false, forKey: Keys.chargeLimitEnabled)
         }
 
+        if defaults.object(forKey: Keys.aiTokenUsageEnabled) == nil {
+            defaults.set(false, forKey: Keys.aiTokenUsageEnabled)
+        }
+
         hoverToExpand = defaults.bool(forKey: Keys.hoverToExpand)
         autoHideDelay = defaults.double(forKey: Keys.autoHideDelay)
         weatherEnabled = defaults.bool(forKey: Keys.weatherEnabled)
@@ -280,5 +291,6 @@ final class AppSettings: ObservableObject {
             rawValue: defaults.string(forKey: Keys.panelTextSizePreset) ?? PanelTextSizePreset.regular.rawValue
         ) ?? .regular
         chargeLimitEnabled = defaults.bool(forKey: Keys.chargeLimitEnabled)
+        aiTokenUsageEnabled = defaults.bool(forKey: Keys.aiTokenUsageEnabled)
     }
 }

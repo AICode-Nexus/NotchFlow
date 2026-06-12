@@ -7,6 +7,7 @@ private enum SettingsTab: Hashable {
     case clipboard
     case wallpaper
     case nowPlaying
+    case aiUsage
     case shortcuts
 
     var title: String {
@@ -23,6 +24,8 @@ private enum SettingsTab: Hashable {
             return "壁纸"
         case .nowPlaying:
             return "媒体"
+        case .aiUsage:
+            return "AI 用量"
         case .shortcuts:
             return "快捷启动"
         }
@@ -42,6 +45,8 @@ private enum SettingsTab: Hashable {
             return "photo.on.rectangle.angled"
         case .nowPlaying:
             return "music.note"
+        case .aiUsage:
+            return "sparkles"
         case .shortcuts:
             return "bolt.fill"
         }
@@ -103,6 +108,14 @@ struct SettingsView: View {
             .tag(SettingsTab.nowPlaying)
 
             settingsForm {
+                aiUsageSections
+            }
+            .tabItem {
+                Label(SettingsTab.aiUsage.title, systemImage: SettingsTab.aiUsage.systemImage)
+            }
+            .tag(SettingsTab.aiUsage)
+
+            settingsForm {
                 shortcutsSections
             }
             .tabItem {
@@ -110,7 +123,7 @@ struct SettingsView: View {
             }
             .tag(SettingsTab.shortcuts)
         }
-        .frame(width: 560, height: 500)
+        .frame(width: 620, height: 540)
     }
 
     private var autoHideDelayLabel: String {
@@ -134,6 +147,18 @@ struct SettingsView: View {
         @unknown default:
             "未知"
         }
+    }
+
+    private var aiUsageTodayLabel: String {
+        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.todayTotalTokens)) token"
+    }
+
+    private var aiUsageSevenDayLabel: String {
+        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.sevenDayTotalTokens)) token"
+    }
+
+    private var aiUsageThirtyDayLabel: String {
+        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.thirtyDayTotalTokens)) token"
     }
 
     @ViewBuilder
@@ -416,6 +441,58 @@ struct SettingsView: View {
 
             Button("立即刷新媒体状态") {
                 model.nowPlaying.refresh()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var aiUsageSections: some View {
+        Section("本机 AI token") {
+            Toggle(
+                "显示 AI 用量",
+                isOn: Binding(
+                    get: { model.settings.aiTokenUsageEnabled },
+                    set: { model.settings.aiTokenUsageEnabled = $0 }
+                )
+            )
+
+            Text("开启后仅在本机读取 Codex、Claude 等工具日志中的 usage/token 元数据，不读取对话正文，不上传网络。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            LabeledContent("状态", value: model.aiTokenUsage.statusMessage)
+            LabeledContent("最近刷新", value: model.aiTokenUsage.lastRefreshText)
+            LabeledContent("今日", value: aiUsageTodayLabel)
+            LabeledContent("近 7 天", value: aiUsageSevenDayLabel)
+            LabeledContent("近 30 天", value: aiUsageThirtyDayLabel)
+
+            Button("立即刷新 AI 用量") {
+                model.aiTokenUsage.refresh()
+            }
+            .disabled(!model.settings.aiTokenUsageEnabled || model.aiTokenUsage.isRefreshing)
+        }
+
+        Section("数据源") {
+            if model.aiTokenUsage.summary.sourceStatuses.isEmpty {
+                Text(model.settings.aiTokenUsageEnabled ? "刷新后显示数据源状态" : "开启后检测本机 AI 工具记录")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.aiTokenUsage.summary.sourceStatuses) { status in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(status.displayName)
+                            Spacer()
+                            Text(status.state.title)
+                                .foregroundStyle(status.state == .available ? .primary : .secondary)
+                        }
+
+                        Text(status.message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
     }
