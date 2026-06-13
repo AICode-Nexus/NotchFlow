@@ -71,6 +71,30 @@ enum PanelTextSizePreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum LogRetentionPreset: Int, CaseIterable, Identifiable {
+    case sevenDays = 7
+    case fourteenDays = 14
+    case thirtyDays = 30
+    case ninetyDays = 90
+
+    var id: Self {
+        self
+    }
+
+    var title: String {
+        switch self {
+        case .sevenDays:
+            return "7 天"
+        case .fourteenDays:
+            return "14 天"
+        case .thirtyDays:
+            return "30 天"
+        case .ninetyDays:
+            return "90 天"
+        }
+    }
+}
+
 enum WallpaperRefreshIntervalPreset: Int, CaseIterable, Identifiable {
     case fiveMinutes = 5
     case fifteenMinutes = 15
@@ -122,6 +146,8 @@ final class AppSettings: ObservableObject {
         static let panelTextSizePreset = "PanelTextSizePreset"
         static let chargeLimitEnabled = "ChargeLimitEnabled"
         static let aiTokenUsageEnabled = "AITokenUsageEnabled"
+        static let nowPlayingEnabled = "NowPlayingEnabled"
+        static let logRetentionPreset = "LogRetentionPreset"
     }
 
     @Published var hoverToExpand: Bool {
@@ -208,6 +234,18 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var nowPlayingEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(nowPlayingEnabled, forKey: Keys.nowPlayingEnabled)
+        }
+    }
+
+    @Published var logRetentionPreset: LogRetentionPreset {
+        didSet {
+            UserDefaults.standard.set(logRetentionPreset.rawValue, forKey: Keys.logRetentionPreset)
+        }
+    }
+
     let chargeLimitMax: Int = 80
     let chargeLimitMin: Int = 75
 
@@ -270,6 +308,14 @@ final class AppSettings: ObservableObject {
             defaults.set(false, forKey: Keys.aiTokenUsageEnabled)
         }
 
+        if defaults.object(forKey: Keys.nowPlayingEnabled) == nil {
+            defaults.set(false, forKey: Keys.nowPlayingEnabled)
+        }
+
+        if defaults.object(forKey: Keys.logRetentionPreset) == nil {
+            defaults.set(LogRetentionPreset.thirtyDays.rawValue, forKey: Keys.logRetentionPreset)
+        }
+
         hoverToExpand = defaults.bool(forKey: Keys.hoverToExpand)
         autoHideDelay = defaults.double(forKey: Keys.autoHideDelay)
         weatherEnabled = defaults.bool(forKey: Keys.weatherEnabled)
@@ -292,5 +338,9 @@ final class AppSettings: ObservableObject {
         ) ?? .regular
         chargeLimitEnabled = defaults.bool(forKey: Keys.chargeLimitEnabled)
         aiTokenUsageEnabled = defaults.bool(forKey: Keys.aiTokenUsageEnabled)
+        nowPlayingEnabled = defaults.bool(forKey: Keys.nowPlayingEnabled)
+        logRetentionPreset = LogRetentionPreset(
+            rawValue: defaults.integer(forKey: Keys.logRetentionPreset)
+        ) ?? .thirtyDays
     }
 }

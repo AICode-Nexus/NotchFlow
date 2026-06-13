@@ -122,6 +122,14 @@ struct AITokenUsageEvent: Equatable, Codable {
     let stableID: String
 }
 
+struct AITokenUsageDirectoryInfo: Equatable, Identifiable {
+    let url: URL
+    let displayPath: String
+    let sizeText: String
+
+    var id: String { url.path }
+}
+
 struct AITokenUsageSourceStatus: Equatable, Identifiable, Codable {
     let id: AITokenUsageSourceID
     var state: AITokenUsageSourceState
@@ -225,7 +233,7 @@ enum AITokenUsageFormatter {
     }
 }
 
-protocol AITokenUsageSourceReading {
+protocol AITokenUsageSourceReading: Sendable {
     var sourceID: AITokenUsageSourceID { get }
     func read(since startDate: Date) -> AITokenUsageSourceReadResult
 }
@@ -272,7 +280,7 @@ enum AITokenUsageAggregator {
     }
 }
 
-struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
+struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendable {
     let sourceID: AITokenUsageSourceID = .codex
     let rootDirectories: [URL]
     private let fileManager: FileManager
@@ -289,7 +297,7 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
         }
 
         let parsedEvents = existingRoots
-            .flatMap { rolloutFiles(in: $0) }
+            .flatMap { rolloutFiles(in: $0, since: startDate) }
             .flatMap { tokenEvents(in: $0, since: startDate) }
 
         return result(
@@ -311,10 +319,10 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
         )
     }
 
-    private func rolloutFiles(in root: URL) -> [URL] {
+    private func rolloutFiles(in root: URL, since startDate: Date) -> [URL] {
         guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
@@ -322,11 +330,20 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
 
         return enumerator
             .compactMap { $0 as? URL }
-            .filter { $0.lastPathComponent.hasPrefix("rollout-") && $0.pathExtension == "jsonl" }
+            .filter { url in
+                guard url.lastPathComponent.hasPrefix("rollout-") && url.pathExtension == "jsonl" else {
+                    return false
+                }
+                if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                   modDate < startDate {
+                    return false
+                }
+                return true
+            }
     }
 
     private func tokenEvents(in fileURL: URL, since startDate: Date) -> [AITokenUsageEvent] {
-        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+        guard let content = tailContent(of: fileURL) else {
             return []
         }
 
@@ -335,6 +352,40 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
             .compactMap { line in
                 codexEvent(from: String(line), fileURL: fileURL, since: startDate)
             }
+    }
+
+    private static let maxReadBytes = 2 * 1024 * 1024
+
+    private func tailContent(of fileURL: URL) -> String? {
+        guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
+              let fileSize = attrs[.size] as? Int
+        else {
+            return try? String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        if fileSize <= Self.maxReadBytes {
+            return try? String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+            return nil
+        }
+        defer { try? handle.close() }
+
+        let offset = UInt64(fileSize - Self.maxReadBytes)
+        try? handle.seek(toOffset: offset)
+        guard let data = try? handle.readToEnd() else {
+            return nil
+        }
+
+        guard var text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        if let firstNewline = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: firstNewline)...])
+        }
+        return text
     }
 
     private func codexEvent(from line: String, fileURL: URL, since startDate: Date) -> AITokenUsageEvent? {
@@ -386,7 +437,7 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading {
     }
 }
 
-struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
+struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendable {
     let sourceID: AITokenUsageSourceID = .claude
     let projectDirectories: [URL]
     let captureDirectories: [URL]
@@ -412,7 +463,7 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
         var seenStableIDs: Set<String> = []
         var parsedEvents: [AITokenUsageEvent] = []
 
-        for fileURL in existingProjectRoots.flatMap({ jsonlFiles(in: $0) }) {
+        for fileURL in existingProjectRoots.flatMap({ jsonlFiles(in: $0, since: startDate) }) {
             parsedEvents.append(
                 contentsOf: tokenEvents(
                     inProjectFile: fileURL,
@@ -422,7 +473,7 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
             )
         }
 
-        for fileURL in existingCaptureRoots.flatMap({ captureFiles(in: $0) }) {
+        for fileURL in existingCaptureRoots.flatMap({ captureFiles(in: $0, since: startDate) }) {
             if let event = tokenEvent(
                 inCaptureFile: fileURL,
                 since: startDate,
@@ -451,10 +502,10 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
         )
     }
 
-    private func jsonlFiles(in root: URL) -> [URL] {
+    private func jsonlFiles(in root: URL, since startDate: Date) -> [URL] {
         guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
@@ -462,13 +513,22 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
 
         return enumerator
             .compactMap { $0 as? URL }
-            .filter { $0.pathExtension == "jsonl" }
+            .filter { url in
+                guard url.pathExtension == "jsonl" else {
+                    return false
+                }
+                if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                   modDate < startDate {
+                    return false
+                }
+                return true
+            }
     }
 
-    private func captureFiles(in root: URL) -> [URL] {
+    private func captureFiles(in root: URL, since startDate: Date) -> [URL] {
         guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
@@ -476,7 +536,16 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
 
         return enumerator
             .compactMap { $0 as? URL }
-            .filter { $0.lastPathComponent.hasSuffix(".response.json") }
+            .filter { url in
+                guard url.lastPathComponent.hasSuffix(".response.json") else {
+                    return false
+                }
+                if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                   modDate < startDate {
+                    return false
+                }
+                return true
+            }
     }
 
     private func tokenEvents(
@@ -484,7 +553,7 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
         since startDate: Date,
         seenStableIDs: inout Set<String>
     ) -> [AITokenUsageEvent] {
-        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+        guard let content = tailContent(of: fileURL) else {
             return []
         }
 
@@ -586,6 +655,40 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
         try? fileManager.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
     }
 
+    private static let maxReadBytes = 2 * 1024 * 1024
+
+    private func tailContent(of fileURL: URL) -> String? {
+        guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
+              let fileSize = attrs[.size] as? Int
+        else {
+            return try? String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        if fileSize <= Self.maxReadBytes {
+            return try? String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+            return nil
+        }
+        defer { try? handle.close() }
+
+        let offset = UInt64(fileSize - Self.maxReadBytes)
+        try? handle.seek(toOffset: offset)
+        guard let data = try? handle.readToEnd() else {
+            return nil
+        }
+
+        guard var text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        if let firstNewline = text.firstIndex(of: "\n") {
+            text = String(text[text.index(after: firstNewline)...])
+        }
+        return text
+    }
+
     private func directoryExists(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
@@ -604,7 +707,7 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading {
     }
 }
 
-struct AITokenUsagePresenceSourceReader: AITokenUsageSourceReading {
+struct AITokenUsagePresenceSourceReader: AITokenUsageSourceReading, @unchecked Sendable {
     let sourceID: AITokenUsageSourceID
     let candidatePaths: [URL]
     private let fileManager: FileManager
@@ -633,6 +736,10 @@ final class AITokenUsageService: ObservableObject {
     @Published private(set) var summary: AITokenUsageSummary = .empty
     @Published private(set) var isRefreshing = false
     @Published private(set) var statusMessage = "AI 用量统计已关闭"
+    @Published private(set) var diskUsageText = "计算中..."
+    @Published private(set) var sourceDirectories: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]] = [:]
+    @Published private(set) var isClearing = false
+    @Published private(set) var lastClearResult: String?
 
     private let settings: AppSettings
     private let readers: [AITokenUsageSourceReading]
@@ -640,6 +747,7 @@ final class AITokenUsageService: ObservableObject {
     private let refreshInterval: TimeInterval = 5 * 60
     private let historyDays = 30
     private var refreshTimer: Timer?
+    private var refreshTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -674,6 +782,7 @@ final class AITokenUsageService: ObservableObject {
 
     func start() {
         bindSettings()
+        calculateDiskUsage()
 
         if settings.aiTokenUsageEnabled {
             scheduleRefreshTimer()
@@ -682,6 +791,8 @@ final class AITokenUsageService: ObservableObject {
     }
 
     func stop() {
+        refreshTask?.cancel()
+        refreshTask = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
         cancellables.removeAll()
@@ -714,7 +825,7 @@ final class AITokenUsageService: ObservableObject {
         }
 
         isRefreshing = true
-        statusMessage = "正在读取本机 AI 用量..."
+        statusMessage = "正在统计 AI 用量..."
 
         let startDate = calendar.date(
             byAdding: .day,
@@ -722,18 +833,30 @@ final class AITokenUsageService: ObservableObject {
             to: calendar.startOfDay(for: Date())
         ) ?? Date(timeIntervalSinceNow: -TimeInterval(historyDays * 24 * 60 * 60))
 
-        let results = readers.map { $0.read(since: startDate) }
-        let nextSummary = AITokenUsageAggregator.summary(
-            from: results,
-            calendar: calendar,
-            refreshedAt: Date()
-        )
+        let readers = self.readers
+        let calendar = self.calendar
 
-        summary = nextSummary
-        statusMessage = nextSummary.todayTotal(calendar: calendar) > 0
-            ? "已刷新今日 AI token 用量"
-            : "暂无今日 AI token 记录"
-        isRefreshing = false
+        refreshTask?.cancel()
+        refreshTask = Task.detached(priority: .utility) {
+            let results = readers.map { $0.read(since: startDate) }
+            let nextSummary = AITokenUsageAggregator.summary(
+                from: results,
+                calendar: calendar,
+                refreshedAt: Date()
+            )
+
+            await MainActor.run {
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                self.summary = nextSummary
+                self.statusMessage = nextSummary.todayTotal(calendar: calendar) > 0
+                    ? "已刷新今日 AI token 用量"
+                    : "暂无今日 AI token 记录"
+                self.isRefreshing = false
+            }
+        }
     }
 
     private func bindSettings() {
@@ -832,6 +955,140 @@ final class AITokenUsageService: ObservableObject {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+
+    // MARK: - Disk Usage & Cleanup
+
+    private nonisolated static let cleanableDirectories: [URL] = {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return [
+            home.appendingPathComponent(".codex/sessions", isDirectory: true),
+            home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true),
+            home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true),
+            home.appendingPathComponent(".claude/projects", isDirectory: true),
+            home.appendingPathComponent(".claude/cc-capture", isDirectory: true),
+        ]
+    }()
+
+    private nonisolated static let sourceDirectoryMapping: [(sourceID: AITokenUsageSourceID, url: URL)] = {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return [
+            (.codex, home.appendingPathComponent(".codex/sessions", isDirectory: true)),
+            (.codex, home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true)),
+            (.codex, home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true)),
+            (.claude, home.appendingPathComponent(".claude/projects", isDirectory: true)),
+            (.claude, home.appendingPathComponent(".claude/cc-capture", isDirectory: true)),
+        ]
+    }()
+
+    func calculateDiskUsage() {
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            let homePath = fm.homeDirectoryForCurrentUser.path
+            var totalBytes: Int64 = 0
+            var dirInfos: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]] = [:]
+
+            for entry in Self.sourceDirectoryMapping {
+                var dirBytes: Int64 = 0
+
+                if let enumerator = fm.enumerator(
+                    at: entry.url,
+                    includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+                    options: [.skipsHiddenFiles]
+                ) {
+                    while let fileURL = enumerator.nextObject() as? URL {
+                        guard Self.isCleanableFile(fileURL) else { continue }
+                        if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                            dirBytes += Int64(size)
+                        }
+                    }
+                }
+
+                totalBytes += dirBytes
+
+                let displayPath = entry.url.path.replacingOccurrences(of: homePath, with: "~")
+                let sizeText = ByteCountFormatter.string(fromByteCount: dirBytes, countStyle: .file)
+                let info = AITokenUsageDirectoryInfo(url: entry.url, displayPath: displayPath, sizeText: sizeText)
+                dirInfos[entry.sourceID, default: []].append(info)
+            }
+
+            let text = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+
+            await MainActor.run {
+                self.diskUsageText = text
+                self.sourceDirectories = dirInfos
+            }
+        }
+    }
+
+    func clearOldLogs(retentionDays: Int) {
+        guard !isClearing else { return }
+
+        isClearing = true
+        lastClearResult = nil
+
+        let cutoffDate = Calendar.current.date(
+            byAdding: .day,
+            value: -retentionDays,
+            to: Calendar.current.startOfDay(for: Date())
+        ) ?? Date.distantPast
+
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            var deletedCount = 0
+            var freedBytes: Int64 = 0
+            let directories = Self.cleanableDirectories
+
+            for directory in directories {
+                guard let enumerator = fm.enumerator(
+                    at: directory,
+                    includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey],
+                    options: [.skipsHiddenFiles]
+                ) else {
+                    continue
+                }
+
+                while let fileURL = enumerator.nextObject() as? URL {
+                    guard Self.isCleanableFile(fileURL) else { continue }
+
+                    guard let values = try? fileURL.resourceValues(
+                        forKeys: [.contentModificationDateKey, .fileSizeKey]
+                    ),
+                        let modDate = values.contentModificationDate,
+                        modDate < cutoffDate
+                    else {
+                        continue
+                    }
+
+                    let fileSize = Int64(values.fileSize ?? 0)
+                    do {
+                        try fm.removeItem(at: fileURL)
+                        deletedCount += 1
+                        freedBytes += fileSize
+                    } catch {
+                        continue
+                    }
+                }
+            }
+
+            let freedText = ByteCountFormatter.string(fromByteCount: freedBytes, countStyle: .file)
+
+            await MainActor.run {
+                self.isClearing = false
+                self.lastClearResult = deletedCount > 0
+                    ? "已清除 \(deletedCount) 个文件，释放 \(freedText)"
+                    : "没有需要清除的文件"
+                self.calculateDiskUsage()
+                self.refresh()
+            }
+        }
+    }
+
+    private nonisolated static func isCleanableFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if ext == "jsonl" { return true }
+        if ext == "json" && url.lastPathComponent.hasSuffix(".response.json") { return true }
+        return false
+    }
 }
 
 extension ISO8601DateFormatter {

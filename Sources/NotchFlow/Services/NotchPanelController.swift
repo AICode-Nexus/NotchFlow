@@ -537,8 +537,9 @@ final class NotchPanelController: ObservableObject {
             + spacing
             + sectionHeights.reduce(0, +)
 
+        let screenWidth = currentPanelScreen()?.frame.width ?? .infinity
         expandedPanelSize = NSSize(
-            width: expandedContentWidth + metrics.horizontalPadding,
+            width: min(expandedContentWidth + metrics.horizontalPadding, screenWidth - 32),
             height: max(totalHeight, 108)
         )
     }
@@ -588,7 +589,7 @@ final class NotchPanelController: ObservableObject {
     }
 
     private var aiTokenUsageModuleWidth: CGFloat {
-        panelMetrics.moduleUnitSize * 1.5
+        panelMetrics.moduleUnitSize * 2
     }
 
     private func preferredScreen(using strategy: ScreenSelectionStrategy) -> NSScreen? {

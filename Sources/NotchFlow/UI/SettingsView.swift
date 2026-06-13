@@ -56,6 +56,7 @@ private enum SettingsTab: Hashable {
 struct SettingsView: View {
     @ObservedObject var model: NotchFlowAppModel
     @State private var selectedTab: SettingsTab = .general
+    @State private var showClearConfirmation = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -435,12 +436,22 @@ struct SettingsView: View {
     @ViewBuilder
     private var nowPlayingSections: some View {
         Section("正在播放") {
-            LabeledContent("当前状态", value: model.nowPlaying.snapshot.isPlaying ? "播放中" : "空闲 / 暂停")
-            LabeledContent("当前标题", value: model.nowPlaying.snapshot.title)
-            LabeledContent("数据来源", value: model.nowPlaying.sourceLabel)
+            Toggle(
+                "启用媒体检测",
+                isOn: Binding(
+                    get: { model.settings.nowPlayingEnabled },
+                    set: { model.settings.nowPlayingEnabled = $0 }
+                )
+            )
 
-            Button("立即刷新媒体状态") {
-                model.nowPlaying.refresh()
+            if model.settings.nowPlayingEnabled {
+                LabeledContent("当前状态", value: model.nowPlaying.snapshot.isPlaying ? "播放中" : "空闲 / 暂停")
+                LabeledContent("当前标题", value: model.nowPlaying.snapshot.title)
+                LabeledContent("数据来源", value: model.nowPlaying.sourceLabel)
+
+                Button("立即刷新媒体状态") {
+                    model.nowPlaying.refresh()
+                }
             }
         }
     }
@@ -479,7 +490,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(model.aiTokenUsage.summary.sourceStatuses) { status in
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(status.displayName)
                             Spacer()
@@ -490,9 +501,74 @@ struct SettingsView: View {
                         Text(status.message)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+
+                        if let dirs = model.aiTokenUsage.sourceDirectories[status.id], !dirs.isEmpty {
+                            ForEach(dirs) { dir in
+                                HStack(spacing: 4) {
+                                    Text(dir.displayPath)
+                                        .font(.footnote)
+                                        .foregroundStyle(.blue)
+                                        .onTapGesture {
+                                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dir.url.path)
+                                        }
+                                    Spacer()
+                                    Text(dir.sizeText)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                     }
                     .padding(.vertical, 2)
                 }
+            }
+        }
+
+        Section("存储管理") {
+            LabeledContent("日志占用", value: model.aiTokenUsage.diskUsageText)
+
+            Picker(
+                "保留天数",
+                selection: Binding(
+                    get: { model.settings.logRetentionPreset },
+                    set: { model.settings.logRetentionPreset = $0 }
+                )
+            ) {
+                ForEach(LogRetentionPreset.allCases) { preset in
+                    Text(preset.title).tag(preset)
+                }
+            }
+
+            Button("清除历史日志") {
+                showClearConfirmation = true
+            }
+            .disabled(model.aiTokenUsage.isClearing)
+            .confirmationDialog(
+                "确认清除",
+                isPresented: $showClearConfirmation
+            ) {
+                Button("清除超过 \(model.settings.logRetentionPreset.title) 的日志", role: .destructive) {
+                    model.aiTokenUsage.clearOldLogs(retentionDays: model.settings.logRetentionPreset.rawValue)
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将删除修改时间超过 \(model.settings.logRetentionPreset.title) 的 AI 工具日志文件（.jsonl），此操作不可撤销。")
+            }
+
+            if model.aiTokenUsage.isClearing {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在清除...")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let result = model.aiTokenUsage.lastClearResult {
+                Text(result)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

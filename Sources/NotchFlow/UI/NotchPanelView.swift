@@ -380,7 +380,7 @@ struct NotchPanelView: View {
     }
 
     private var aiTokenUsageModuleWidth: CGFloat {
-        moduleUnitSize * 1.5
+        moduleUnitSize * 2
     }
 
     private var quickLaunchUsesCarouselLayout: Bool {
@@ -561,7 +561,7 @@ struct NotchPanelView: View {
         VStack(spacing: 12) {
             expandedHeader
 
-            if nowPlaying.snapshot.hasContent {
+            if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
                 nowPlayingSection
                     .transition(expandedSectionTransition)
             }
@@ -575,7 +575,7 @@ struct NotchPanelView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .animation(panelContentAnimation, value: nowPlaying.snapshot.hasContent)
+        .animation(panelContentAnimation, value: settings.nowPlayingEnabled && nowPlaying.snapshot.hasContent)
         .animation(panelContentAnimation, value: moduleAnimationKey)
     }
 
@@ -671,38 +671,40 @@ struct NotchPanelView: View {
 
     @ViewBuilder
     private var moduleRow: some View {
-        HStack(alignment: .top, spacing: moduleSpacing) {
-            if shouldShowWeatherSection {
-                weatherSection
-                    .transition(moduleCardTransition)
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: moduleSpacing) {
+                if shouldShowWeatherSection {
+                    weatherSection
+                        .transition(moduleCardTransition)
+                }
 
-            if shouldShowBatterySection {
-                batterySection
-                    .transition(moduleCardTransition)
-            }
+                if shouldShowBatterySection {
+                    batterySection
+                        .transition(moduleCardTransition)
+                }
 
-            if shouldShowWallpaperSection {
-                wallpaperSection
-                    .transition(moduleCardTransition)
-            }
+                if shouldShowWallpaperSection {
+                    wallpaperSection
+                        .transition(moduleCardTransition)
+                }
 
-            if shouldShowAITokenUsageSection {
-                aiTokenUsageSection
-                    .transition(moduleCardTransition)
-            }
+                if shouldShowAITokenUsageSection {
+                    aiTokenUsageSection
+                        .transition(moduleCardTransition)
+                }
 
-            if shouldShowClipboardSection {
-                clipboardHistorySection
-                    .transition(moduleCardTransition)
-            }
+                if shouldShowClipboardSection {
+                    clipboardHistorySection
+                        .transition(moduleCardTransition)
+                }
 
-            if shouldShowQuickLaunchSection {
-                quickLaunchSection
-                    .transition(moduleCardTransition)
+                if shouldShowQuickLaunchSection {
+                    quickLaunchSection
+                        .transition(moduleCardTransition)
+                }
             }
+            .frame(width: contentRowWidth, alignment: .center)
         }
-        .frame(width: contentRowWidth, alignment: .center)
         .frame(minHeight: moduleUnitSize, maxHeight: moduleUnitSize, alignment: .center)
         .frame(maxWidth: .infinity, alignment: .center)
     }
@@ -1072,17 +1074,41 @@ struct NotchPanelView: View {
             Spacer(minLength: 6)
 
             if aiTokenUsage.todayTotalTokens > 0 {
-                Text(AITokenUsageFormatter.tokenCount(aiTokenUsage.todayTotalTokens))
-                    .font(panelFont(26, weight: .bold))
-                    .foregroundStyle(modulePrimaryTextColor)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(AITokenUsageFormatter.tokenCount(aiTokenUsage.todayTotalTokens))
+                            .font(panelFont(26, weight: .bold))
+                            .foregroundStyle(modulePrimaryTextColor)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
 
-                Text("今日总 token")
-                    .font(panelFont(12, weight: .semibold))
-                    .foregroundStyle(moduleSecondaryTextColor)
-                    .lineLimit(1)
+                        Text("今日总 token")
+                            .font(panelFont(12, weight: .semibold))
+                            .foregroundStyle(moduleSecondaryTextColor)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(aiTokenUsage.diskUsageText)
+                            .font(panelFont(11, weight: .medium))
+                            .foregroundStyle(moduleSecondaryTextColor)
+                            .monospacedDigit()
+
+                        Button {
+                            aiTokenUsage.clearOldLogs(retentionDays: settings.logRetentionPreset.rawValue)
+                        } label: {
+                            Label("清除", systemImage: "trash")
+                                .font(panelFont(11, weight: .medium))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(moduleSecondaryTextColor)
+                        .disabled(aiTokenUsage.isClearing)
+                        .help("清除超过 \(settings.logRetentionPreset.title) 的日志")
+                    }
+                }
 
                 Spacer(minLength: 6)
 
@@ -1095,7 +1121,7 @@ struct NotchPanelView: View {
                         .font(panelFont(18, weight: .medium))
                         .foregroundStyle(moduleTertiaryTextColor)
 
-                    Text(aiTokenUsage.isRefreshing ? "正在读取记录" : "暂无今日记录")
+                    Text(aiTokenUsage.isRefreshing ? "正在统计中" : "暂无今日记录")
                         .font(panelFont(12, weight: .semibold))
                         .foregroundStyle(modulePrimaryTextColor)
                         .lineLimit(1)
@@ -1855,7 +1881,7 @@ struct NotchPanelView: View {
 
     @ViewBuilder
     private var compactAccessory: some View {
-        if nowPlaying.snapshot.hasContent {
+        if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             Circle()
                 .fill(nowPlaying.snapshot.isPlaying ? style.positiveIndicatorColor : style.inactiveIndicatorColor)
                 .frame(width: 7, height: 7)
@@ -1904,7 +1930,7 @@ struct NotchPanelView: View {
     }
 
     private var compactSymbolName: String {
-        if nowPlaying.snapshot.hasContent {
+        if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             return "waveform"
         }
 
@@ -1937,7 +1963,7 @@ struct NotchPanelView: View {
     }
 
     private var compactTitle: String {
-        if nowPlaying.snapshot.hasContent {
+        if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             return nowPlaying.snapshot.title
         }
 
