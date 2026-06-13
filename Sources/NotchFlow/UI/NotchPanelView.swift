@@ -1442,9 +1442,7 @@ struct NotchPanelView: View {
 
     @ViewBuilder
     private var batteryFooter: some View {
-        if battery.snapshot.accessories.isEmpty {
-            batteryEmptyAccessoriesView
-        } else {
+        if !battery.snapshot.accessories.isEmpty {
             batteryAccessoriesStrip
         }
     }
