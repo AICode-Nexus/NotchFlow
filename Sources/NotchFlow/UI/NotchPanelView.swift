@@ -898,11 +898,11 @@ struct NotchPanelView: View {
                 }
             }
 
-            Spacer(minLength: 6)
+            Spacer()
 
             batteryHero
 
-            Spacer(minLength: 6)
+            Spacer()
 
             if settings.chargeLimitEnabled || chargeLimit.state == .chargingDisabled {
                 Button {
@@ -924,8 +924,6 @@ struct NotchPanelView: View {
                     .background(moduleTileBackgroundColor, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
-
-                Spacer(minLength: 4)
             }
 
             batteryFooter
@@ -1427,7 +1425,7 @@ struct NotchPanelView: View {
     }
 
     private var batteryHero: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(batteryCenterValueText)
                 .font(panelFont(28, weight: .bold))
                 .foregroundStyle(modulePrimaryTextColor)
@@ -1436,6 +1434,13 @@ struct NotchPanelView: View {
                 .minimumScaleFactor(0.8)
 
             batteryLevelBar
+
+            if !(settings.chargeLimitEnabled || chargeLimit.state == .chargingDisabled) {
+                Text(batteryStatusCaption)
+                    .font(panelFont(12, weight: .medium))
+                    .foregroundStyle(moduleSecondaryTextColor)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2055,16 +2060,23 @@ struct NotchPanelView: View {
         primaryBatterySnapshot?.percentageText ?? "--"
     }
 
-    private var batteryPrimaryCaption: String {
+    private var batteryStatusCaption: String {
         guard let primaryBattery = primaryBatterySnapshot else {
             return battery.snapshot.disconnectedAccessoryCount > 0 ? "等待设备连接" : "暂无设备"
         }
 
-        if primaryBattery.kind == .mac {
-            return primaryBattery.isCharging ? "本机正在充电" : "本机电量"
+        if primaryBattery.isCharging {
+            return "正在充电"
         }
 
-        return primaryBattery.name
+        switch primaryBattery.percentage {
+        case 81...100:
+            return "电量充足"
+        case 21...80:
+            return "电量正常"
+        default:
+            return "电量偏低"
+        }
     }
 
     private var batteryAccessoryStatusText: String {
