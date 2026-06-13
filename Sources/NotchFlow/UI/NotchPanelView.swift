@@ -1098,15 +1098,14 @@ struct NotchPanelView: View {
                             .monospacedDigit()
 
                         Button {
-                            aiTokenUsage.clearOldLogs(retentionDays: settings.logRetentionPreset.rawValue)
+                            openSettings()
                         } label: {
-                            Label("清除", systemImage: "trash")
+                            Label("去清理", systemImage: "arrow.right.circle")
                                 .font(panelFont(11, weight: .medium))
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(moduleSecondaryTextColor)
-                        .disabled(aiTokenUsage.isClearing)
-                        .help("清除超过 \(settings.logRetentionPreset.title) 的日志")
+                        .help("打开设置管理存储")
                     }
                 }
 
@@ -1435,17 +1434,6 @@ struct NotchPanelView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-
-            HStack(spacing: 4) {
-                Image(systemName: batteryCenterSymbolName)
-                    .font(panelFont(9, weight: .semibold))
-                    .foregroundStyle(moduleSecondaryTextColor)
-
-                Text(batteryPrimaryCaption)
-                    .font(panelFont(12, weight: .semibold))
-                    .foregroundStyle(moduleSecondaryTextColor)
-                    .lineLimit(1)
-            }
 
             batteryLevelBar
         }
