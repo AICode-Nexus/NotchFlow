@@ -137,6 +137,22 @@ final class ScreenHealthServiceTests: XCTestCase {
 }
 
 final class ScreenHealthPresentationTests: XCTestCase {
+    func testExpandedCardContentFitsInsideModuleHeightWhenReminderVisible() {
+        let textScales = PanelTextSizePreset.allCases.map { CGFloat($0.scale) }
+
+        for textScale in textScales {
+            let layout = ScreenHealthPanelLayout(
+                metrics: NotchPanelMetrics(textScale: textScale),
+                showsRestReminder: true
+            )
+
+            XCTAssertLessThanOrEqual(
+                layout.requiredContentHeight,
+                layout.availableContentHeight + 0.1
+            )
+        }
+    }
+
     func testDurationFormatterUsesCompactChineseLabels() {
         XCTAssertEqual(ScreenHealthFormatter.duration(0), "0 分钟")
         XCTAssertEqual(ScreenHealthFormatter.duration(45 * 60), "45 分钟")

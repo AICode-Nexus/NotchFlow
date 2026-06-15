@@ -75,6 +75,66 @@ struct NotchPanelMetrics {
     }
 }
 
+struct ScreenHealthPanelLayout {
+    let metrics: NotchPanelMetrics
+    let showsRestReminder: Bool
+
+    var availableContentHeight: CGFloat {
+        metrics.moduleUnitSize - (cardVerticalInset * 2)
+    }
+
+    var requiredContentHeight: CGFloat {
+        headerHeight
+            + scoreTopSpacing
+            + scoreRowHeight
+            + statusRowHeight
+            + metricTopSpacing
+            + metricTileHeight
+            + reminderTopSpacing
+            + reminderRowHeight
+    }
+
+    var cardVerticalInset: CGFloat {
+        metrics.scaled(10, minimum: 10)
+    }
+
+    var headerHeight: CGFloat {
+        metrics.scaled(18, minimum: 18)
+    }
+
+    var scoreTopSpacing: CGFloat {
+        metrics.scaled(showsRestReminder ? 1 : 5, minimum: showsRestReminder ? 1 : 5)
+    }
+
+    var scoreRowHeight: CGFloat {
+        metrics.scaled(showsRestReminder ? 25 : 31, minimum: showsRestReminder ? 25 : 31)
+    }
+
+    var statusRowHeight: CGFloat {
+        metrics.scaled(14, minimum: 14)
+    }
+
+    var metricTopSpacing: CGFloat {
+        metrics.scaled(showsRestReminder ? 1 : 5, minimum: showsRestReminder ? 1 : 5)
+    }
+
+    var metricTileHeight: CGFloat {
+        metrics.scaled(25, minimum: 25)
+    }
+
+    var reminderTopSpacing: CGFloat {
+        showsRestReminder ? metrics.scaled(1, minimum: 1) : 0
+    }
+
+    var reminderRowHeight: CGFloat {
+        showsRestReminder ? metrics.scaled(13, minimum: 13) : 0
+    }
+
+    var scoreFontSize: CGFloat {
+        showsRestReminder ? 22 : 26
+    }
+}
+
 @MainActor
 struct NotchPanelStyle {
     let appearanceMode: PanelAppearanceMode
@@ -1153,71 +1213,87 @@ struct NotchPanelView: View {
     }
 
     private var screenHealthSection: some View {
-        moduleCard(width: screenHealthModuleWidth) {
+        let layout = ScreenHealthPanelLayout(
+            metrics: panelMetrics,
+            showsRestReminder: screenHealth.snapshot.shouldShowRestReminder
+        )
+
+        return moduleCard(width: screenHealthModuleWidth) {
             moduleHeader("屏幕健康", systemImage: "eye") {
                 Image(systemName: screenHealthHeaderSymbolName)
                     .font(panelFont(11, weight: .semibold))
                     .foregroundStyle(screenHealthAccentColor)
             }
 
-            Spacer(minLength: 5)
+            Spacer(minLength: 0)
+                .frame(height: layout.scoreTopSpacing)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(screenHealth.snapshot.healthScore)")
-                    .font(panelFont(26, weight: .bold))
+                    .font(panelFont(layout.scoreFontSize, weight: .bold, minimum: 20))
                     .foregroundStyle(screenHealthAccentColor)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
                 Text("分")
-                    .font(panelFont(12, weight: .semibold))
+                    .font(panelFont(11, weight: .semibold, minimum: 10))
                     .foregroundStyle(moduleSecondaryTextColor)
+                    .lineLimit(1)
             }
+            .frame(height: layout.scoreRowHeight, alignment: .leading)
 
             Text(screenHealth.snapshot.status.title)
-                .font(panelFont(12, weight: .semibold))
+                .font(panelFont(11, weight: .semibold, minimum: 10))
                 .foregroundStyle(moduleSecondaryTextColor)
                 .lineLimit(1)
+                .frame(height: layout.statusRowHeight, alignment: .leading)
 
-            Spacer(minLength: 5)
+            Spacer(minLength: 0)
+                .frame(height: layout.metricTopSpacing)
 
             HStack(spacing: 6) {
                 screenHealthMetricTile(
                     title: "今日",
-                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.todayActiveSeconds)
+                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.todayActiveSeconds),
+                    height: layout.metricTileHeight
                 )
                 screenHealthMetricTile(
                     title: "连续",
-                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.continuousActiveSeconds)
+                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.continuousActiveSeconds),
+                    height: layout.metricTileHeight
                 )
             }
+            .frame(height: layout.metricTileHeight)
 
             if screenHealth.snapshot.shouldShowRestReminder {
+                Spacer(minLength: 0)
+                    .frame(height: layout.reminderTopSpacing)
+
                 Text("看远处，活动一下")
-                    .font(panelFont(11, weight: .medium))
+                    .font(panelFont(10, weight: .medium, minimum: 10))
                     .foregroundStyle(screenHealthAccentColor)
                     .lineLimit(1)
-                    .padding(.top, 4)
+                    .frame(height: layout.reminderRowHeight, alignment: .leading)
             }
         }
     }
 
-    private func screenHealthMetricTile(title: String, value: String) -> some View {
+    private func screenHealthMetricTile(title: String, value: String, height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
-                .font(panelFont(10, weight: .medium))
+                .font(panelFont(10, weight: .medium, minimum: 10))
                 .foregroundStyle(moduleTertiaryTextColor)
                 .lineLimit(1)
 
             Text(value)
-                .font(panelFont(11, weight: .semibold))
+                .font(panelFont(10, weight: .semibold, minimum: 10))
                 .foregroundStyle(moduleSecondaryTextColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
         .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity, minHeight: 25, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)
         .background(moduleTileBackgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
