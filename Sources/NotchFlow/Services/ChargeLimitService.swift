@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import IOKit.ps
 import notify
 
 enum ChargeLimitState: Equatable {
@@ -37,17 +38,20 @@ final class ChargeLimitService: ObservableObject {
     private let settings: AppSettings
     private let helperExecutablePath: String
     private let helperCommandRunner: ((String) -> String)?
+    private let currentPercentProvider: () -> Int?
     private var notifyToken: Int32 = 0
     private var isRegistered = false
 
     init(
         settings: AppSettings,
         installedHelperPath: String = "/usr/local/bin/notchflow-smc-helper",
-        helperCommandRunner: ((String) -> String)? = nil
+        helperCommandRunner: ((String) -> String)? = nil,
+        currentPercentProvider: @escaping () -> Int? = ChargeLimitService.systemInternalBatteryPercent
     ) {
         self.settings = settings
         self.helperExecutablePath = installedHelperPath
         self.helperCommandRunner = helperCommandRunner
+        self.currentPercentProvider = currentPercentProvider
         self.isHelperInstalled = helperInstalled()
     }
 
@@ -78,6 +82,7 @@ final class ChargeLimitService: ObservableObject {
             return
         }
 
+        state = status.chargingDisabled ? .chargingDisabled : .monitoring
         registerPercentNotification()
     }
 
@@ -160,19 +165,32 @@ final class ChargeLimitService: ObservableObject {
     }
 
     private func handlePercentChange() {
-        var token: Int32 = 0
-        let status = notify_register_check("com.apple.system.powersources.percent", &token)
-        guard status == NOTIFY_STATUS_OK else { return }
-
-        var packedBits: UInt64 = 0
-        notify_get_state(token, &packedBits)
-        notify_cancel(token)
-
-        let validBit: UInt64 = 1 << 19
-        guard (packedBits & validBit) != 0 else { return }
-
-        let percent = Int(min(packedBits & 0xFF, 100))
+        guard let percent = currentPercentProvider() else { return }
         reconcile(percent: percent)
+    }
+
+    nonisolated private static func systemInternalBatteryPercent() -> Int? {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else {
+            return nil
+        }
+
+        for source in sources {
+            guard let description = IOPSGetPowerSourceDescription(info, source)?
+                .takeUnretainedValue() as? [String: Any],
+                description[kIOPSTypeKey] as? String == kIOPSInternalBatteryType,
+                let current = description[kIOPSCurrentCapacityKey] as? Int,
+                let maximum = description[kIOPSMaxCapacityKey] as? Int,
+                maximum > 0
+            else {
+                continue
+            }
+
+            return min(max(Int((Double(current) / Double(maximum) * 100).rounded()), 0), 100)
+        }
+
+        return nil
     }
 
     func reconcile(percent: Int) {

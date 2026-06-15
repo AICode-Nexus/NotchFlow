@@ -23,9 +23,24 @@ final class ChargeLimitServiceTests: XCTestCase {
         XCTAssertEqual(fixture.service.state, .monitoring)
     }
 
+    func testStartDisablesChargingImmediatelyWhenBatteryIsAboveLimit() {
+        let fixture = makeFixture(
+            enabled: true,
+            chargingDisabled: false,
+            currentPercent: 83
+        )
+
+        fixture.service.start()
+
+        XCTAssertEqual(fixture.commands.commands, ["status", "status", "disable-charging"])
+        XCTAssertEqual(fixture.service.currentPercent, 83)
+        XCTAssertEqual(fixture.service.state, .chargingDisabled)
+    }
+
     private func makeFixture(
         enabled: Bool,
-        chargingDisabled: Bool
+        chargingDisabled: Bool,
+        currentPercent: Int = 50
     ) -> (service: ChargeLimitService, commands: CommandLog) {
         let suiteName = "ChargeLimitServiceTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -39,7 +54,8 @@ final class ChargeLimitServiceTests: XCTestCase {
             installedHelperPath: "/usr/bin/true",
             helperCommandRunner: { command in
                 commands.run(command)
-            }
+            },
+            currentPercentProvider: { currentPercent }
         )
 
         return (service, commands)
