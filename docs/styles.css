@@ -106,7 +106,7 @@ code {
 
 .brand {
   gap: 9px;
-  min-height: 40px;
+  min-height: 44px;
   font-weight: 750;
 }
 
@@ -153,7 +153,7 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 18px;
   font-weight: 800;
 }
@@ -180,8 +180,8 @@ code {
 
 .hero-home {
   display: grid;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(500px, 1.22fr);
-  gap: clamp(24px, 3vw, 44px);
+  grid-template-columns: minmax(320px, 420px) minmax(520px, 1fr);
+  gap: 56px;
   align-items: center;
   width: min(1160px, calc(100% - 36px));
   min-height: min(700px, calc(100svh - 82px));
@@ -190,7 +190,9 @@ code {
 }
 
 .hero-copy {
-  max-width: 480px;
+  position: relative;
+  z-index: 2;
+  max-width: 420px;
 }
 
 .kicker {
@@ -209,8 +211,9 @@ p {
 }
 
 h1 {
-  font-size: 88px;
-  line-height: 0.88;
+  max-width: 100%;
+  font-size: 80px;
+  line-height: 0.9;
   letter-spacing: 0;
 }
 
@@ -258,6 +261,7 @@ h2 {
 }
 
 .screenshot-stage {
+  z-index: 1;
   padding: clamp(10px, 1.2vw, 16px);
   animation: stage-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -294,7 +298,7 @@ h2 {
 .route-strip a {
   flex: 1;
   min-width: 0;
-  padding: 16px;
+  padding: 20px 26px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.045);
 }
@@ -369,7 +373,7 @@ h2 {
 
 .segmented button {
   border: 0;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 14px;
   color: var(--muted);
   background: transparent;
@@ -492,6 +496,12 @@ h2 {
   color: var(--accent);
 }
 
+.site-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 .reveal {
   opacity: 1;
   transform: none;
@@ -521,7 +531,7 @@ h2 {
 
 @media (min-width: 1320px) {
   h1 {
-    font-size: 112px;
+    font-size: 96px;
   }
 
   h2 {
@@ -545,7 +555,7 @@ h2 {
   }
 }
 
-@media (max-width: 920px) {
+@media (max-width: 960px) {
   .site-shell {
     grid-template-columns: 1fr auto;
   }
