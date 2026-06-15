@@ -1,82 +1,106 @@
 # NotchFlow
 
-Mac 灵动岛插件。
+<p align="center">
+  <img src="docs/assets/notchflow-logo.png" alt="NotchFlow logo" width="128">
+</p>
 
-macOS 刘海应用调研与第一版原型目录。
+<p align="center">
+  A native macOS notch utility for quick status, media control, launch actions, and lightweight daily context.
+</p>
 
-## 目标
+<p align="center">
+  <a href="https://aicode-nexus.github.io/NotchFlow/">Website</a>
+  ·
+  <a href="https://github.com/AICode-Nexus/NotchFlow/releases/latest">Download</a>
+  ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-研究现有 macOS 刘海区 / 灵动岛风格应用的实现方式，再把可复用的模式整理成一个原生小原型。
+## What It Does
 
-## 当前重点
+NotchFlow turns the top center of your Mac screen into a compact, glanceable control surface. It runs as a menu bar app, keeps the Dock clean, and expands from a notch-shaped panel when you hover, click, or use the global shortcut.
 
-- 竞品功能梳理
-- 窗口与刘海定位策略
-- 交互方式：悬停、展开、活动卡片、快捷动作
-- 权限与后台常驻约束
+The first public release is a developer preview for macOS 14 and newer.
 
-## 当前原型能力
+## Highlights
 
-- 菜单栏常驻入口
-- 顶部中央刘海面板
-- 悬停展开、点击固定、自动收起
-- 全局快捷键：`Option + Command + Space`
-- 正在播放卡片
-- 播放 / 暂停、上一首 / 下一首
-- 设置窗口
-- 非刘海屏降级定位
-- 多屏基础重定位
+- Notch-style floating panel with hover expansion, click pinning, auto hide, and `Option + Command + Space`.
+- Media card with now-playing metadata and playback controls.
+- Weather and battery glance module with graceful fallback behavior.
+- Screen health module for active time, continuous focus duration, and break reminders.
+- Clipboard history, quick launch shortcuts, script shortcuts, and wallpaper refresh tools.
+- AI token usage summary for local Claude/Codex usage logs.
+- Experimental charge limit controls backed by an included SMC helper.
+- Settings window for appearance, text size, modules, refresh intervals, and startup behavior.
 
-## 运行方式
+## Install
 
-### 正式工程
+1. Download `NotchFlow-v0.1.0-macOS.zip` from the latest GitHub Release.
+2. Unzip it and move `NotchFlow.app` to `/Applications`.
+3. If macOS blocks the first launch because the app is not notarized yet, right-click the app and choose **Open**.
+4. Grant the requested permissions only for features you enable, such as location, automation, or launch at login.
 
-直接打开：
+## Current Release Notes
 
-- `NotchFlow.xcodeproj`
+`v0.1.0` is the first public preview. It is locally signed for distribution testing, but it is not Apple notarized and does not use a Developer ID certificate yet.
 
-命令行构建：
+Known limitations:
+
+- Some integrations depend on macOS permissions and third-party app availability.
+- Weather can fall back when WeatherKit authorization or location access is unavailable.
+- Charge limit control is experimental and depends on hardware/SMC behavior.
+- Release packaging is a simple `.zip`; notarized DMG packaging is planned for a later release.
+
+See [CHANGELOG.md](CHANGELOG.md) for the complete version history.
+
+## Build From Source
+
+Open the Xcode project:
 
 ```bash
-xcodebuild -project NotchFlow.xcodeproj -scheme NotchFlow -configuration Debug build
+open NotchFlow.xcodeproj
 ```
 
-构建产物默认在：
+Run the test suite:
 
-- `DerivedData/Build/Products/Debug/NotchFlow.app`
+```bash
+swift test
+```
 
-### 轻量原型运行
+Build the macOS app:
 
-保留 `Swift Package` 入口，便于快速调试：
+```bash
+xcodebuild -project NotchFlow.xcodeproj -scheme NotchFlow -configuration Release build
+```
 
-在项目根目录执行：
+The Swift Package entry point remains available for quick local iteration:
 
 ```bash
 swift run
 ```
 
-## 工程生成
+## Project Maintenance
 
-Xcode 工程由脚本生成，后续增删源文件后可以重新执行：
+Regenerate the Xcode project after adding or removing Swift source files:
 
 ```bash
 ruby scripts/generate_xcodeproj.rb
 ```
 
-## 当前已知限制
+Regenerate release visual assets and app icons:
 
-- “开机自启”在 `swift run` 这种开发模式下可能不可用，真正打包成 App Bundle 后更合适
-- “正在播放”优先读取系统媒体状态，失败时降级到 Music App
-- 现在的多屏策略是优先跟随当前鼠标所在屏幕，后面还可以继续打磨
+```bash
+swift scripts/generate_release_assets.swift
+```
 
-## 调研文件
+## Research Notes
+
+Early scope and competitive research remain in:
 
 - `research/competitors.md`
 - `research/feature-list.md`
 - `research/v1-scope.md`
 
-## 接下来要回答的问题
+## License
 
-- 第一版原型是偏媒体工具、系统工具，还是偏开发工作流？
-- 是先只面向刘海屏 Mac，还是一开始就兼容非刘海屏？
-- 窗口的最佳触发方式是什么：悬停展开、点击展开，还是快捷键唤起？
+No open source license has been declared yet. Please contact the repository owner before redistributing modified builds.

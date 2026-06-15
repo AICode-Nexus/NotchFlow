@@ -21,6 +21,7 @@
 		C0DEF1000000000000000007 /* CompactWeatherBatteryPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */; };
 		C0DEF1000000000000000009 /* AITokenUsageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF100000000000000000A /* AITokenUsageService.swift */; };
 		C0DEF2000000000000000001 /* ScreenHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF2000000000000000002 /* ScreenHealthService.swift */; };
+		C0DEF3000000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0DEF3000000000000000002 /* Assets.xcassets */; };
 		5D80A695687A15D49A6D8084 /* WallpaperRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D660B2722ED9C41AEE9576 /* WallpaperRefreshService.swift */; };
 		668C10665E6C77431AC78520 /* BatteryStatusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DAE1AD9A5F692D642E1B8B /* BatteryStatusService.swift */; };
 		738BC539792A9C7996ADCF34 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EE8D9876740F4498018967 /* MenuBarContentView.swift */; };
@@ -76,6 +77,7 @@
 		C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompactWeatherBatteryPresentation.swift; path = Sources/NotchFlow/UI/CompactWeatherBatteryPresentation.swift; sourceTree = "<group>"; };
 		C0DEF100000000000000000A /* AITokenUsageService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AITokenUsageService.swift; path = Sources/NotchFlow/Services/AITokenUsageService.swift; sourceTree = "<group>"; };
 		C0DEF2000000000000000002 /* ScreenHealthService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScreenHealthService.swift; path = Sources/NotchFlow/Services/ScreenHealthService.swift; sourceTree = "<group>"; };
+		C0DEF3000000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		AD65C9F5DD564C7F01A04FD3 /* NotchPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotchPanelView.swift; path = Sources/NotchFlow/UI/NotchPanelView.swift; sourceTree = "<group>"; };
 		BDFA46DA6C5DC16B3DCD49A9 /* EffectsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EffectsView.swift; path = Sources/NotchFlow/UI/EffectsView.swift; sourceTree = "<group>"; };
 		C30B68F20D369283B0A2BCE3 /* NowPlayingSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NowPlayingSnapshot.swift; path = Sources/NotchFlow/Models/NowPlayingSnapshot.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				A502A96C477265046EB2CFC9 /* Frameworks */,
 				956539AF709124E758B56E14 /* Info.plist */,
 				C0DEF1000000000000000003 /* NotchFlow.entitlements */,
+				C0DEF3000000000000000002 /* Assets.xcassets */,
 				2BFE68EAE4244FF68C570A9A /* Sources */,
 				D06F3ABF579CCEB07E6A0D05 /* Docs */,
 			);
@@ -253,6 +256,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0DEF3000000000000000001 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

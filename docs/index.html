@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="NotchFlow is a native macOS notch utility for quick status, media control, launch actions, and lightweight daily context.">
+    <title>NotchFlow - macOS Notch Utility</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="NotchFlow home">
+        <img src="assets/notchflow-logo.png" alt="" width="34" height="34">
+        <span>NotchFlow</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/AICode-Nexus/NotchFlow">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <img class="hero-image" src="assets/notchflow-hero.png" alt="NotchFlow panel preview on a Mac-style desktop">
+        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-copy">
+          <p class="version">v0.1.0 developer preview</p>
+          <h1 id="hero-title">NotchFlow</h1>
+          <p class="subtitle">A native macOS notch utility for quick status, media control, launch actions, and lightweight daily context.</p>
+          <div class="hero-actions">
+            <a class="primary-action" href="https://github.com/AICode-Nexus/NotchFlow/releases/latest">Download</a>
+            <a class="secondary-action" href="https://github.com/AICode-Nexus/NotchFlow">View source</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="release-band" aria-label="Release summary">
+        <div>
+          <span class="label">Platform</span>
+          <strong>macOS 14+</strong>
+        </div>
+        <div>
+          <span class="label">Build</span>
+          <strong>Locally signed</strong>
+        </div>
+        <div>
+          <span class="label">Shortcut</span>
+          <strong>Option + Command + Space</strong>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="section-heading">
+          <span class="eyebrow">First public preview</span>
+          <h2>One compact surface for the things you check all day.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <h3>Notch Panel</h3>
+            <p>Hover to expand, click to pin, auto hide when idle, and keep the Dock out of the way.</p>
+          </article>
+          <article>
+            <h3>Media and Status</h3>
+            <p>Now Playing controls sit beside weather, battery, and screen health signals.</p>
+          </article>
+          <article>
+            <h3>Quick Actions</h3>
+            <p>Launch apps, run scripts, inspect clipboard history, and refresh wallpapers from the menu bar app.</p>
+          </article>
+          <article>
+            <h3>Developer Context</h3>
+            <p>Track local AI token usage and keep experimental battery charge controls close at hand.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="install" class="section split-section">
+        <div>
+          <span class="eyebrow">Install</span>
+          <h2>Download the zip, move the app, open once.</h2>
+        </div>
+        <ol class="install-list">
+          <li>Download <code>NotchFlow-v0.1.0-macOS.zip</code> from the GitHub Release.</li>
+          <li>Unzip and move <code>NotchFlow.app</code> to <code>/Applications</code>.</li>
+          <li>If macOS blocks the preview build, right-click the app and choose <strong>Open</strong>.</li>
+          <li>Enable only the permissions needed for the modules you use.</li>
+        </ol>
+      </section>
+
+      <section class="section notes-section">
+        <div>
+          <span class="eyebrow">Release notes</span>
+          <h2>Built for a useful preview, not yet a notarized production installer.</h2>
+        </div>
+        <div class="notes">
+          <p>The v0.1.0 release is locally signed and distributed as a simple zip. Developer ID signing, notarization, and a packaged installer are planned after the preview proves the core workflow.</p>
+          <a href="https://github.com/AICode-Nexus/NotchFlow/blob/main/CHANGELOG.md">Read the changelog</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>NotchFlow</span>
+      <a href="https://github.com/AICode-Nexus/NotchFlow">github.com/AICode-Nexus/NotchFlow</a>
+    </footer>
+  </body>
+</html>

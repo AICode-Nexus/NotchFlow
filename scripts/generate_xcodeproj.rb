@@ -20,6 +20,7 @@ target.product_name = PROJECT_NAME
 
 info_plist_ref = project.main_group.new_file('App/Info.plist')
 project.main_group.new_file('App/NotchFlow.entitlements')
+assets_ref = project.main_group.new_file('App/Assets.xcassets')
 
 sources_group = project.main_group.find_subpath('Sources', true)
 source_refs = Dir.glob(ROOT.join('Sources/NotchFlow/**/*.swift')).sort.map do |path|
@@ -31,12 +32,19 @@ target.add_file_references(source_refs)
 docs_group = project.main_group.find_subpath('Docs', true)
 [
   'README.md',
+  'CHANGELOG.md',
+  'RELEASE.md',
+  'RELEASE_NOTES.md',
+  'docs/index.html',
+  'docs/styles.css',
   'research/competitors.md',
   'research/feature-list.md',
   'research/v1-scope.md',
 ].each do |path|
   docs_group.new_file(path)
 end
+
+target.resources_build_phase.add_file_reference(assets_ref)
 
 framework_paths = [
   '/System/Library/Frameworks/AppKit.framework',
