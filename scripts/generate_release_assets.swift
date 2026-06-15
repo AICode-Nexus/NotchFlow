@@ -41,6 +41,10 @@ struct ReleaseAssetGenerator {
 
         let hero = makeHero(size: NSSize(width: 1800, height: 1100), icon: icon)
         try writePNG(hero, to: docsAssetsURL.appendingPathComponent("notchflow-hero.png"))
+        try writePNG(makeStageShot(size: NSSize(width: 1600, height: 1040), icon: icon), to: docsAssetsURL.appendingPathComponent("notchflow-stage.png"))
+        try writePNG(makePanelShot(size: NSSize(width: 1400, height: 920), icon: icon), to: docsAssetsURL.appendingPathComponent("notchflow-panel.png"))
+        try writePNG(makeModulesShot(size: NSSize(width: 1400, height: 920), icon: icon), to: docsAssetsURL.appendingPathComponent("notchflow-modules.png"))
+        try writePNG(makeSettingsShot(size: NSSize(width: 1400, height: 920), icon: icon), to: docsAssetsURL.appendingPathComponent("notchflow-settings.png"))
     }
 
     private func makeIcon(size: CGFloat) -> NSImage {
@@ -148,6 +152,163 @@ struct ReleaseAssetGenerator {
             rounded(NSRect(x: display.maxX - 418, y: display.minY + 104, width: 290, height: 18), radius: 9).fill()
             rounded(NSRect(x: display.maxX - 418, y: display.minY + 146, width: 360, height: 26), radius: 13).fill()
         }
+    }
+
+    private func makeStageShot(size: NSSize, icon: NSImage) -> NSImage {
+        draw(size: size) { rect in
+            drawAmbientBackground(rect)
+            let screen = NSRect(x: 118, y: 118, width: 1364, height: 804)
+            drawScreenFrame(screen)
+            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "Now playing / Weather / Battery")
+            drawDockLine(in: screen)
+        }
+    }
+
+    private func makePanelShot(size: NSSize, icon: NSImage) -> NSImage {
+        draw(size: size) { rect in
+            drawAmbientBackground(rect)
+            let screen = NSRect(x: 90, y: 76, width: 1220, height: 768)
+            drawScreenFrame(screen)
+            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "Pinned around the notch")
+        }
+    }
+
+    private func makeModulesShot(size: NSSize, icon: NSImage) -> NSImage {
+        draw(size: size) { rect in
+            drawAmbientBackground(rect)
+            let screen = NSRect(x: 90, y: 76, width: 1220, height: 768)
+            drawScreenFrame(screen)
+            drawCompactNotch(in: screen)
+            drawModuleGrid(in: screen, icon: icon)
+        }
+    }
+
+    private func makeSettingsShot(size: NSSize, icon: NSImage) -> NSImage {
+        draw(size: size) { rect in
+            drawAmbientBackground(rect)
+            let window = NSRect(x: 190, y: 110, width: 1020, height: 700)
+            NSColor(calibratedRed: 0.060, green: 0.075, blue: 0.084, alpha: 0.94).setFill()
+            rounded(window, radius: 34).fill()
+            NSColor(calibratedWhite: 1, alpha: 0.18).setStroke()
+            let border = rounded(window, radius: 34)
+            border.lineWidth = 2
+            border.stroke()
+
+            icon.draw(in: NSRect(x: window.minX + 34, y: window.maxY - 82, width: 46, height: 46))
+            drawText("Settings", in: NSRect(x: window.minX + 96, y: window.maxY - 72, width: 220, height: 30), size: 26, weight: .bold, color: .white)
+            drawText("Modules and panel behavior", in: NSRect(x: window.minX + 96, y: window.maxY - 102, width: 320, height: 22), size: 15, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
+
+            let sidebar = NSRect(x: window.minX + 28, y: window.minY + 34, width: 236, height: 520)
+            NSColor(calibratedWhite: 1, alpha: 0.06).setFill()
+            rounded(sidebar, radius: 22).fill()
+            for index in 0..<7 {
+                let y = sidebar.maxY - CGFloat(index + 1) * 62
+                let item = NSRect(x: sidebar.minX + 16, y: y, width: sidebar.width - 32, height: 42)
+                NSColor(calibratedWhite: 1, alpha: index == 0 ? 0.14 : 0.06).setFill()
+                rounded(item, radius: 14).fill()
+            }
+
+            for index in 0..<4 {
+                let panel = NSRect(x: window.minX + 306, y: window.maxY - 166 - CGFloat(index) * 126, width: 646, height: 92)
+                NSColor(calibratedWhite: 1, alpha: 0.07).setFill()
+                rounded(panel, radius: 20).fill()
+                NSColor(calibratedRed: index % 2 == 0 ? 0.396 : 0.962, green: index % 2 == 0 ? 0.902 : 0.706, blue: index % 2 == 0 ? 0.760 : 0.357, alpha: 1).setFill()
+                rounded(NSRect(x: panel.minX + 24, y: panel.midY - 11, width: 22, height: 22), radius: 11).fill()
+                drawText(["Hover expand", "Now Playing", "Weather module", "Screen health"][index], in: NSRect(x: panel.minX + 62, y: panel.maxY - 46, width: 280, height: 24), size: 18, weight: .semibold, color: .white)
+                drawText(["On", "System media + Music fallback", "Location aware", "Break reminder"][index], in: NSRect(x: panel.minX + 62, y: panel.minY + 18, width: 360, height: 20), size: 14, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.58))
+                NSColor(calibratedWhite: 1, alpha: 0.18).setFill()
+                rounded(NSRect(x: panel.maxX - 98, y: panel.midY - 15, width: 64, height: 30), radius: 15).fill()
+            }
+        }
+    }
+
+    private func drawAmbientBackground(_ rect: NSRect) {
+        let background = NSGradient(colors: [
+            NSColor(calibratedRed: 0.060, green: 0.070, blue: 0.088, alpha: 1),
+            NSColor(calibratedRed: 0.070, green: 0.112, blue: 0.110, alpha: 1),
+            NSColor(calibratedRed: 0.160, green: 0.124, blue: 0.074, alpha: 1)
+        ])
+        background?.draw(in: rect, angle: -25)
+    }
+
+    private func drawScreenFrame(_ screen: NSRect) {
+        NSColor(calibratedWhite: 0.0, alpha: 0.70).setFill()
+        rounded(screen, radius: 44).fill()
+        NSColor(calibratedWhite: 1.0, alpha: 0.14).setStroke()
+        let border = rounded(screen, radius: 44)
+        border.lineWidth = 2
+        border.stroke()
+        NSColor(calibratedRed: 0.035, green: 0.045, blue: 0.052, alpha: 1).setFill()
+        rounded(screen.insetBy(dx: 34, dy: 34), radius: 30).fill()
+        drawCompactNotch(in: screen)
+    }
+
+    private func drawCompactNotch(in screen: NSRect) {
+        let notch = NSRect(x: screen.midX - 140, y: screen.maxY - 66, width: 280, height: 70)
+        NSColor.black.setFill()
+        rounded(notch, radius: 34).fill()
+        NSColor(calibratedWhite: 0, alpha: 1).setFill()
+        rounded(NSRect(x: screen.midX - 112, y: screen.maxY - 48, width: 224, height: 38), radius: 19).fill()
+    }
+
+    private func drawExpandedPanel(in screen: NSRect, icon: NSImage, title: String, subtitle: String) {
+        let panel = NSRect(x: screen.midX - 398, y: screen.maxY - 344, width: 796, height: 286)
+        NSColor(calibratedWhite: 0.02, alpha: 0.92).setFill()
+        rounded(panel, radius: 36).fill()
+        NSColor(calibratedWhite: 1.0, alpha: 0.16).setStroke()
+        let panelBorder = rounded(panel, radius: 36)
+        panelBorder.lineWidth = 1.5
+        panelBorder.stroke()
+
+        icon.draw(in: NSRect(x: panel.minX + 36, y: panel.maxY - 94, width: 52, height: 52))
+        drawText(title, in: NSRect(x: panel.minX + 106, y: panel.maxY - 78, width: 280, height: 32), size: 28, weight: .bold, color: .white)
+        drawText(subtitle, in: NSRect(x: panel.minX + 108, y: panel.maxY - 112, width: 390, height: 24), size: 16, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
+
+        drawModule(NSRect(x: panel.minX + 36, y: panel.minY + 36, width: 214, height: 112), title: "Media", value: "Pause", accent: NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1))
+        drawModule(NSRect(x: panel.minX + 290, y: panel.minY + 36, width: 214, height: 112), title: "Weather", value: "23 C", accent: NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1))
+        drawModule(NSRect(x: panel.minX + 544, y: panel.minY + 36, width: 214, height: 112), title: "Focus", value: "42 min", accent: NSColor(calibratedRed: 0.670, green: 0.740, blue: 1.0, alpha: 1))
+    }
+
+    private func drawModuleGrid(in screen: NSRect, icon: NSImage) {
+        let startX = screen.minX + 112
+        let startY = screen.minY + 112
+        let width: CGFloat = 306
+        let height: CGFloat = 190
+        let gap: CGFloat = 32
+        let titles = ["Now Playing", "Weather", "Battery", "Clipboard", "AI Usage", "Shortcuts"]
+        let values = ["Ocean Eyes", "23 C", "81%", "7 clips", "128k", "Scripts"]
+        let accents = [
+            NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1),
+            NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1),
+            NSColor(calibratedRed: 0.670, green: 0.740, blue: 1.0, alpha: 1)
+        ]
+
+        for index in 0..<6 {
+            let column = index % 3
+            let row = index / 3
+            let rect = NSRect(
+                x: startX + CGFloat(column) * (width + gap),
+                y: startY + CGFloat(1 - row) * (height + gap),
+                width: width,
+                height: height
+            )
+            NSColor(calibratedWhite: 1, alpha: 0.075).setFill()
+            rounded(rect, radius: 28).fill()
+            let accent = accents[index % accents.count]
+            accent.setFill()
+            rounded(NSRect(x: rect.minX + 28, y: rect.maxY - 48, width: 56, height: 9), radius: 4.5).fill()
+            if index == 0 {
+                icon.draw(in: NSRect(x: rect.maxX - 78, y: rect.maxY - 78, width: 44, height: 44))
+            }
+            drawText(titles[index], in: NSRect(x: rect.minX + 28, y: rect.minY + 74, width: rect.width - 56, height: 26), size: 20, weight: .bold, color: .white)
+            drawText(values[index], in: NSRect(x: rect.minX + 28, y: rect.minY + 36, width: rect.width - 56, height: 28), size: 24, weight: .bold, color: accent)
+        }
+    }
+
+    private func drawDockLine(in screen: NSRect) {
+        NSColor(calibratedWhite: 1, alpha: 0.10).setFill()
+        rounded(NSRect(x: screen.minX + 120, y: screen.minY + 94, width: 430, height: 22), radius: 11).fill()
+        rounded(NSRect(x: screen.maxX - 530, y: screen.minY + 94, width: 410, height: 22), radius: 11).fill()
     }
 
     private func drawModule(_ rect: NSRect, title: String, value: String, accent: NSColor) {
