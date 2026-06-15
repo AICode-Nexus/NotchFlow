@@ -23,15 +23,15 @@ if ("IntersectionObserver" in window) {
 const shotMap = {
   panel: {
     src: "assets/notchflow-panel.png",
-    alt: "NotchFlow expanded panel screenshot"
+    alt: "NotchFlow 展开面板截图"
   },
   modules: {
     src: "assets/notchflow-modules.png",
-    alt: "NotchFlow modules screenshot"
+    alt: "NotchFlow 模块截图"
   },
   settings: {
     src: "assets/notchflow-settings.png",
-    alt: "NotchFlow settings screenshot"
+    alt: "NotchFlow 设置界面截图"
   }
 };
 

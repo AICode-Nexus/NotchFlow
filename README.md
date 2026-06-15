@@ -1,106 +1,106 @@
 # NotchFlow
 
 <p align="center">
-  <img src="docs/assets/notchflow-logo.png" alt="NotchFlow logo" width="128">
+  <img src="docs/assets/notchflow-logo.png" alt="NotchFlow 标志" width="128">
 </p>
 
 <p align="center">
-  A native macOS notch utility for quick status, media control, launch actions, and lightweight daily context.
+  NotchFlow 把 Mac 刘海变成紧凑的状态、媒体与快捷操作控制台。
 </p>
 
 <p align="center">
-  <a href="https://aicode-nexus.github.io/NotchFlow/">Website</a>
+  <a href="https://aicode-nexus.github.io/NotchFlow/">中文官网</a>
   ·
-  <a href="https://github.com/AICode-Nexus/NotchFlow/releases/latest">Download</a>
+  <a href="https://github.com/AICode-Nexus/NotchFlow/releases/latest">下载预览版</a>
   ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="CHANGELOG.md">更新日志</a>
 </p>
 
-## What It Does
+## 它能做什么
 
-NotchFlow turns the top center of your Mac screen into a compact, glanceable control surface. It runs as a menu bar app, keeps the Dock clean, and expands from a notch-shaped panel when you hover, click, or use the global shortcut.
+NotchFlow 是一款原生 macOS 刘海工具。它以菜单栏应用运行，不占用 Dock，在屏幕顶部以刘海形态悬浮，支持悬停展开、点击固定和全局快捷键。
 
-The first public release is a developer preview for macOS 14 and newer.
+第一个公开版本是面向 macOS 14 及更新系统的开发者预览版。
 
-## Highlights
+## 功能亮点
 
-- Notch-style floating panel with hover expansion, click pinning, auto hide, and `Option + Command + Space`.
-- Media card with now-playing metadata and playback controls.
-- Weather and battery glance module with graceful fallback behavior.
-- Screen health module for active time, continuous focus duration, and break reminders.
-- Clipboard history, quick launch shortcuts, script shortcuts, and wallpaper refresh tools.
-- AI token usage summary for local Claude/Codex usage logs.
-- Experimental charge limit controls backed by an included SMC helper.
-- Settings window for appearance, text size, modules, refresh intervals, and startup behavior.
+- 刘海形态悬浮面板：支持悬停展开、点击固定、自动隐藏和 `Option + Command + Space`。
+- 媒体卡片：显示正在播放内容，并提供播放控制与 Music 兜底能力。
+- 天气与电量模块：适合一眼查看，并在权限不足时优雅降级。
+- 护眼与专注模块：统计活跃时长、连续专注时间、健康分和休息提醒。
+- 剪贴板历史、快速启动、脚本快捷方式和壁纸刷新工具。
+- 本地 Claude/Codex 使用日志的 AI token 用量摘要。
+- 实验性充电限制控制，包含随包提供的 SMC helper。
+- 设置窗口：管理外观、字号、模块、刷新间隔、启动行为与权限。
 
-## Install
+## 安装
 
-1. Download `NotchFlow-v0.1.0-macOS.zip` from the latest GitHub Release.
-2. Unzip it and move `NotchFlow.app` to `/Applications`.
-3. If macOS blocks the first launch because the app is not notarized yet, right-click the app and choose **Open**.
-4. Grant the requested permissions only for features you enable, such as location, automation, or launch at login.
+1. 从最新 GitHub 发布页下载 `NotchFlow-v0.1.0-macOS.zip`。
+2. 解压后把 `NotchFlow.app` 移动到 `/Applications`。
+3. 如果 macOS 首次启动时提示应用暂未公证，请右键应用并选择 **打开**。
+4. 只为你启用的功能授予权限，例如定位、自动化或登录时启动。
 
-## Current Release Notes
+## 当前版本说明
 
-`v0.1.0` is the first public preview. It is locally signed for distribution testing, but it is not Apple notarized and does not use a Developer ID certificate yet.
+`v0.1.0` 是第一个公开开发者预览版。它用于分发流程验证，当前为本地签名，还未使用 Apple Developer ID 公证。
 
-Known limitations:
+已知限制：
 
-- Some integrations depend on macOS permissions and third-party app availability.
-- Weather can fall back when WeatherKit authorization or location access is unavailable.
-- Charge limit control is experimental and depends on hardware/SMC behavior.
-- Release packaging is a simple `.zip`; notarized DMG packaging is planned for a later release.
+- 部分集成依赖 macOS 权限和第三方应用可用性。
+- WeatherKit 授权或定位权限不可用时，天气模块会进入兜底状态。
+- 充电限制控制仍为实验功能，具体表现取决于硬件和 SMC 行为。
+- 当前发布包为简单 `.zip`；后续计划提供已公证的 DMG 安装包。
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete version history.
+完整版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
-## Build From Source
+## 从源码构建
 
-Open the Xcode project:
+打开 Xcode 项目：
 
 ```bash
 open NotchFlow.xcodeproj
 ```
 
-Run the test suite:
+运行测试：
 
 ```bash
 swift test
 ```
 
-Build the macOS app:
+构建 macOS 应用：
 
 ```bash
 xcodebuild -project NotchFlow.xcodeproj -scheme NotchFlow -configuration Release build
 ```
 
-The Swift Package entry point remains available for quick local iteration:
+Swift Package 入口仍可用于本地快速迭代：
 
 ```bash
 swift run
 ```
 
-## Project Maintenance
+## 项目维护
 
-Regenerate the Xcode project after adding or removing Swift source files:
+添加或删除 Swift 源文件后，重新生成 Xcode 项目：
 
 ```bash
 ruby scripts/generate_xcodeproj.rb
 ```
 
-Regenerate release visual assets and app icons:
+重新生成发布图片资源和应用图标：
 
 ```bash
 swift scripts/generate_release_assets.swift
 ```
 
-## Research Notes
+## 研究资料
 
-Early scope and competitive research remain in:
+早期范围和竞品研究保留在：
 
 - `research/competitors.md`
 - `research/feature-list.md`
 - `research/v1-scope.md`
 
-## License
+## 许可
 
-No open source license has been declared yet. Please contact the repository owner before redistributing modified builds.
+当前暂未声明开源许可。重新分发修改版构建前，请先联系仓库所有者。

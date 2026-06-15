@@ -1,31 +1,33 @@
-# Changelog
+# 更新日志
 
-All notable changes to NotchFlow are documented here.
+NotchFlow 的重要变更会记录在这里。
 
 ## [0.1.0] - 2026-06-15
 
-### Added
+### 新增
 
-- First public macOS preview release.
-- Notch-style menu bar app with hover expansion, click pinning, auto hide, and global hotkey support.
-- Now Playing panel with playback controls and Music fallback behavior.
-- Weather and device battery presentation with compact fallback behavior.
-- Screen health tracking with active time, continuous duration, score, and break reminders.
-- Clipboard history, quick launch shortcuts, script shortcuts, and wallpaper refresh controls.
-- AI token usage reader for local Claude/Codex usage logs.
-- Experimental charge limit service with bundled SMC helper.
-- Settings window for modules, appearance, launch at login, text size, intervals, and permissions.
-- GitHub Pages landing page, release README, and reusable NotchFlow logo/app icon assets.
+- 第一个公开 macOS 开发者预览版。
+- 刘海形态菜单栏应用，支持悬停展开、点击固定、自动隐藏和全局快捷键。
+- 正在播放面板，包含播放控制和 Music 兜底逻辑。
+- 天气与设备电量展示，并包含紧凑的降级状态。
+- 护眼与专注统计：活跃时长、连续时长、健康分和休息提醒。
+- 剪贴板历史、快速启动、脚本快捷方式和壁纸刷新控制。
+- 本地 Claude/Codex 使用日志的 AI token 用量读取。
+- 实验性充电限制服务，包含随包提供的 SMC helper。
+- 设置窗口：管理模块、外观、登录启动、字号、刷新间隔和权限。
+- 中文 GitHub Pages、多层级截图体验页，以及可复用的 NotchFlow 标志和应用图标。
 
-### Changed
+### 变更
 
-- Repositioned the public README from prototype notes to release-ready product documentation.
-- Documented install, build, testing, and release limitations for the first public build.
+- 将 README 从原型说明调整为中文发布文档。
+- 重新设计 GitHub Pages：拆分首页、体验、安装、发布说明页面，改为紧凑深色界面与产品截图主视觉。
+- 更新发布截图、官网标志和 App Icon，使颜色与当前产品页面一致。
+- 补充安装、构建、测试和首个公开版本限制说明。
 
-### Known Limitations
+### 已知限制
 
-- The release asset is locally signed but not notarized with Apple Developer ID.
-- Weather, automation, and launch-at-login behavior depend on macOS permissions.
-- Charge limit support remains experimental because SMC behavior differs across hardware.
+- 发布资产为本地签名，尚未使用 Apple Developer ID 公证。
+- 天气、自动化和登录启动行为依赖 macOS 权限。
+- 充电限制仍为实验功能，SMC 行为会因硬件不同而变化。
 
 [0.1.0]: https://github.com/AICode-Nexus/NotchFlow/releases/tag/v0.1.0

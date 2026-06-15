@@ -53,9 +53,9 @@ struct ReleaseAssetGenerator {
             rounded(rect, radius: radius).addClip()
 
             let background = NSGradient(colors: [
-                NSColor(calibratedRed: 0.035, green: 0.042, blue: 0.058, alpha: 1.0),
-                NSColor(calibratedRed: 0.024, green: 0.031, blue: 0.038, alpha: 1.0),
-                NSColor(calibratedRed: 0.100, green: 0.073, blue: 0.045, alpha: 1.0)
+                NSColor(calibratedRed: 0.027, green: 0.032, blue: 0.044, alpha: 1.0),
+                NSColor(calibratedRed: 0.018, green: 0.022, blue: 0.030, alpha: 1.0),
+                NSColor(calibratedRed: 0.040, green: 0.062, blue: 0.098, alpha: 1.0)
             ])
             background?.draw(in: rect, angle: -38)
 
@@ -68,7 +68,7 @@ struct ReleaseAssetGenerator {
             NSColor(calibratedWhite: 0.0, alpha: 0.92).setFill()
             rounded(notch, radius: notch.height * 0.48).fill()
 
-            NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1.0).setStroke()
+            NSColor(calibratedRed: 0.541, green: 0.722, blue: 1.000, alpha: 1.0).setStroke()
             let flow = NSBezierPath()
             flow.lineWidth = size * 0.078
             flow.lineCapStyle = .round
@@ -80,7 +80,7 @@ struct ReleaseAssetGenerator {
             )
             flow.stroke()
 
-            NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1.0).setFill()
+            NSColor(calibratedRed: 0.784, green: 0.863, blue: 1.000, alpha: 1.0).setFill()
             let dotSize = size * 0.118
             rounded(
                 NSRect(x: size * 0.616, y: size * 0.370, width: dotSize, height: dotSize),
@@ -104,9 +104,9 @@ struct ReleaseAssetGenerator {
     private func makeHero(size: NSSize, icon: NSImage) -> NSImage {
         draw(size: size) { rect in
             let background = NSGradient(colors: [
-                NSColor(calibratedRed: 0.026, green: 0.031, blue: 0.043, alpha: 1),
-                NSColor(calibratedRed: 0.040, green: 0.060, blue: 0.065, alpha: 1),
-                NSColor(calibratedRed: 0.125, green: 0.090, blue: 0.050, alpha: 1)
+                NSColor(calibratedRed: 0.024, green: 0.028, blue: 0.038, alpha: 1),
+                NSColor(calibratedRed: 0.036, green: 0.046, blue: 0.066, alpha: 1),
+                NSColor(calibratedRed: 0.056, green: 0.082, blue: 0.126, alpha: 1)
             ])
             background?.draw(in: rect, angle: -25)
 
@@ -140,11 +140,11 @@ struct ReleaseAssetGenerator {
 
             icon.draw(in: NSRect(x: panel.minX + 32, y: panel.maxY - 92, width: 50, height: 50))
             drawText("NotchFlow", in: NSRect(x: panel.minX + 98, y: panel.maxY - 80, width: 250, height: 34), size: 28, weight: .bold, color: .white)
-            drawText("Now playing / Weather / Battery", in: NSRect(x: panel.minX + 100, y: panel.maxY - 112, width: 360, height: 24), size: 16, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
+            drawText("播放 / 天气 / 电量", in: NSRect(x: panel.minX + 100, y: panel.maxY - 112, width: 360, height: 24), size: 16, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
 
-            drawModule(NSRect(x: panel.minX + 34, y: panel.minY + 34, width: 190, height: 104), title: "Media", value: "Pause", accent: NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1))
-            drawModule(NSRect(x: panel.minX + 250, y: panel.minY + 34, width: 190, height: 104), title: "Weather", value: "23 C", accent: NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1))
-            drawModule(NSRect(x: panel.minX + 466, y: panel.minY + 34, width: 190, height: 104), title: "Focus", value: "42 min", accent: NSColor(calibratedRed: 0.670, green: 0.740, blue: 1.0, alpha: 1))
+            drawModule(NSRect(x: panel.minX + 34, y: panel.minY + 34, width: 190, height: 104), title: "媒体", value: "暂停", accent: NSColor(calibratedRed: 0.541, green: 0.722, blue: 1.000, alpha: 1))
+            drawModule(NSRect(x: panel.minX + 250, y: panel.minY + 34, width: 190, height: 104), title: "天气", value: "23 C", accent: NSColor(calibratedRed: 0.784, green: 0.863, blue: 1.000, alpha: 1))
+            drawModule(NSRect(x: panel.minX + 466, y: panel.minY + 34, width: 190, height: 104), title: "专注", value: "42 分钟", accent: NSColor(calibratedRed: 0.640, green: 0.690, blue: 0.780, alpha: 1))
 
             NSColor(calibratedWhite: 1, alpha: 0.10).setFill()
             rounded(NSRect(x: display.minX + 108, y: display.minY + 98, width: 420, height: 26), radius: 13).fill()
@@ -159,7 +159,7 @@ struct ReleaseAssetGenerator {
             drawAmbientBackground(rect)
             let screen = NSRect(x: 118, y: 118, width: 1364, height: 804)
             drawScreenFrame(screen)
-            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "Now playing / Weather / Battery")
+            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "播放 / 天气 / 电量")
             drawDockLine(in: screen)
         }
     }
@@ -169,7 +169,7 @@ struct ReleaseAssetGenerator {
             drawAmbientBackground(rect)
             let screen = NSRect(x: 90, y: 76, width: 1220, height: 768)
             drawScreenFrame(screen)
-            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "Pinned around the notch")
+            drawExpandedPanel(in: screen, icon: icon, title: "NotchFlow", subtitle: "固定在刘海附近")
         }
     }
 
@@ -187,7 +187,7 @@ struct ReleaseAssetGenerator {
         draw(size: size) { rect in
             drawAmbientBackground(rect)
             let window = NSRect(x: 190, y: 110, width: 1020, height: 700)
-            NSColor(calibratedRed: 0.060, green: 0.075, blue: 0.084, alpha: 0.94).setFill()
+            NSColor(calibratedRed: 0.050, green: 0.061, blue: 0.082, alpha: 0.96).setFill()
             rounded(window, radius: 34).fill()
             NSColor(calibratedWhite: 1, alpha: 0.18).setStroke()
             let border = rounded(window, radius: 34)
@@ -195,8 +195,8 @@ struct ReleaseAssetGenerator {
             border.stroke()
 
             icon.draw(in: NSRect(x: window.minX + 34, y: window.maxY - 82, width: 46, height: 46))
-            drawText("Settings", in: NSRect(x: window.minX + 96, y: window.maxY - 72, width: 220, height: 30), size: 26, weight: .bold, color: .white)
-            drawText("Modules and panel behavior", in: NSRect(x: window.minX + 96, y: window.maxY - 102, width: 320, height: 22), size: 15, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
+            drawText("设置", in: NSRect(x: window.minX + 96, y: window.maxY - 72, width: 220, height: 30), size: 26, weight: .bold, color: .white)
+            drawText("模块与面板行为", in: NSRect(x: window.minX + 96, y: window.maxY - 102, width: 320, height: 22), size: 15, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
 
             let sidebar = NSRect(x: window.minX + 28, y: window.minY + 34, width: 236, height: 520)
             NSColor(calibratedWhite: 1, alpha: 0.06).setFill()
@@ -212,10 +212,10 @@ struct ReleaseAssetGenerator {
                 let panel = NSRect(x: window.minX + 306, y: window.maxY - 166 - CGFloat(index) * 126, width: 646, height: 92)
                 NSColor(calibratedWhite: 1, alpha: 0.07).setFill()
                 rounded(panel, radius: 20).fill()
-                NSColor(calibratedRed: index % 2 == 0 ? 0.396 : 0.962, green: index % 2 == 0 ? 0.902 : 0.706, blue: index % 2 == 0 ? 0.760 : 0.357, alpha: 1).setFill()
+                NSColor(calibratedRed: index % 2 == 0 ? 0.541 : 0.784, green: index % 2 == 0 ? 0.722 : 0.863, blue: 1.000, alpha: 1).setFill()
                 rounded(NSRect(x: panel.minX + 24, y: panel.midY - 11, width: 22, height: 22), radius: 11).fill()
-                drawText(["Hover expand", "Now Playing", "Weather module", "Screen health"][index], in: NSRect(x: panel.minX + 62, y: panel.maxY - 46, width: 280, height: 24), size: 18, weight: .semibold, color: .white)
-                drawText(["On", "System media + Music fallback", "Location aware", "Break reminder"][index], in: NSRect(x: panel.minX + 62, y: panel.minY + 18, width: 360, height: 20), size: 14, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.58))
+                drawText(["悬停展开", "正在播放", "天气模块", "屏幕休息"][index], in: NSRect(x: panel.minX + 62, y: panel.maxY - 46, width: 280, height: 24), size: 18, weight: .semibold, color: .white)
+                drawText(["开启", "系统媒体 + 音乐回退", "定位感知", "休息提醒"][index], in: NSRect(x: panel.minX + 62, y: panel.minY + 18, width: 360, height: 20), size: 14, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.58))
                 NSColor(calibratedWhite: 1, alpha: 0.18).setFill()
                 rounded(NSRect(x: panel.maxX - 98, y: panel.midY - 15, width: 64, height: 30), radius: 15).fill()
             }
@@ -224,9 +224,9 @@ struct ReleaseAssetGenerator {
 
     private func drawAmbientBackground(_ rect: NSRect) {
         let background = NSGradient(colors: [
-            NSColor(calibratedRed: 0.060, green: 0.070, blue: 0.088, alpha: 1),
-            NSColor(calibratedRed: 0.070, green: 0.112, blue: 0.110, alpha: 1),
-            NSColor(calibratedRed: 0.160, green: 0.124, blue: 0.074, alpha: 1)
+            NSColor(calibratedRed: 0.030, green: 0.036, blue: 0.050, alpha: 1),
+            NSColor(calibratedRed: 0.044, green: 0.056, blue: 0.082, alpha: 1),
+            NSColor(calibratedRed: 0.070, green: 0.092, blue: 0.132, alpha: 1)
         ])
         background?.draw(in: rect, angle: -25)
     }
@@ -238,7 +238,7 @@ struct ReleaseAssetGenerator {
         let border = rounded(screen, radius: 44)
         border.lineWidth = 2
         border.stroke()
-        NSColor(calibratedRed: 0.035, green: 0.045, blue: 0.052, alpha: 1).setFill()
+            NSColor(calibratedRed: 0.030, green: 0.037, blue: 0.050, alpha: 1).setFill()
         rounded(screen.insetBy(dx: 34, dy: 34), radius: 30).fill()
         drawCompactNotch(in: screen)
     }
@@ -264,9 +264,9 @@ struct ReleaseAssetGenerator {
         drawText(title, in: NSRect(x: panel.minX + 106, y: panel.maxY - 78, width: 280, height: 32), size: 28, weight: .bold, color: .white)
         drawText(subtitle, in: NSRect(x: panel.minX + 108, y: panel.maxY - 112, width: 390, height: 24), size: 16, weight: .medium, color: NSColor(calibratedWhite: 1, alpha: 0.62))
 
-        drawModule(NSRect(x: panel.minX + 36, y: panel.minY + 36, width: 214, height: 112), title: "Media", value: "Pause", accent: NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1))
-        drawModule(NSRect(x: panel.minX + 290, y: panel.minY + 36, width: 214, height: 112), title: "Weather", value: "23 C", accent: NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1))
-        drawModule(NSRect(x: panel.minX + 544, y: panel.minY + 36, width: 214, height: 112), title: "Focus", value: "42 min", accent: NSColor(calibratedRed: 0.670, green: 0.740, blue: 1.0, alpha: 1))
+        drawModule(NSRect(x: panel.minX + 36, y: panel.minY + 36, width: 214, height: 112), title: "媒体", value: "暂停", accent: NSColor(calibratedRed: 0.541, green: 0.722, blue: 1.000, alpha: 1))
+        drawModule(NSRect(x: panel.minX + 290, y: panel.minY + 36, width: 214, height: 112), title: "天气", value: "23 C", accent: NSColor(calibratedRed: 0.784, green: 0.863, blue: 1.000, alpha: 1))
+        drawModule(NSRect(x: panel.minX + 544, y: panel.minY + 36, width: 214, height: 112), title: "专注", value: "42 分钟", accent: NSColor(calibratedRed: 0.640, green: 0.690, blue: 0.780, alpha: 1))
     }
 
     private func drawModuleGrid(in screen: NSRect, icon: NSImage) {
@@ -275,12 +275,12 @@ struct ReleaseAssetGenerator {
         let width: CGFloat = 306
         let height: CGFloat = 190
         let gap: CGFloat = 32
-        let titles = ["Now Playing", "Weather", "Battery", "Clipboard", "AI Usage", "Shortcuts"]
-        let values = ["Ocean Eyes", "23 C", "81%", "7 clips", "128k", "Scripts"]
+        let titles = ["正在播放", "天气", "电量", "剪贴板", "AI 用量", "快捷指令"]
+        let values = ["Ocean Eyes", "23 C", "81%", "7 条", "128k", "脚本"]
         let accents = [
-            NSColor(calibratedRed: 0.396, green: 0.902, blue: 0.760, alpha: 1),
-            NSColor(calibratedRed: 0.962, green: 0.706, blue: 0.357, alpha: 1),
-            NSColor(calibratedRed: 0.670, green: 0.740, blue: 1.0, alpha: 1)
+            NSColor(calibratedRed: 0.541, green: 0.722, blue: 1.000, alpha: 1),
+            NSColor(calibratedRed: 0.784, green: 0.863, blue: 1.000, alpha: 1),
+            NSColor(calibratedRed: 0.640, green: 0.690, blue: 0.780, alpha: 1)
         ]
 
         for index in 0..<6 {

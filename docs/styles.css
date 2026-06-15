@@ -1,17 +1,18 @@
 :root {
   color-scheme: dark;
-  --page: #07090d;
-  --page-soft: #0b1114;
-  --ink: #f7f4eb;
-  --muted: #aeb9b7;
-  --line: rgba(247, 244, 235, 0.16);
-  --line-strong: rgba(247, 244, 235, 0.28);
-  --glass: rgba(255, 255, 255, 0.09);
-  --glass-strong: rgba(255, 255, 255, 0.14);
-  --accent: #65e6c2;
-  --warm: #f4b565;
-  --violet: #aeb9ff;
-  --shadow: 0 32px 90px rgba(0, 0, 0, 0.36);
+  --page: #06070a;
+  --page-soft: #0a0d12;
+  --ink: #f4f7fb;
+  --muted: #a4afbd;
+  --muted-strong: #c3ccd8;
+  --line: rgba(180, 196, 216, 0.18);
+  --line-strong: rgba(202, 215, 232, 0.32);
+  --glass: rgba(15, 19, 27, 0.72);
+  --glass-strong: rgba(24, 31, 43, 0.84);
+  --accent: #8ab8ff;
+  --accent-strong: #c8dcff;
+  --accent-ink: #05101f;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
 }
 
 * {
@@ -27,8 +28,9 @@ body {
   margin: 0;
   overflow-x: hidden;
   background:
-    linear-gradient(120deg, rgba(174, 185, 255, 0.16), transparent 34%),
-    linear-gradient(260deg, rgba(101, 230, 194, 0.14), transparent 42%),
+    linear-gradient(135deg, rgba(138, 184, 255, 0.13), transparent 38%),
+    linear-gradient(225deg, rgba(226, 232, 240, 0.08), transparent 46%),
+    linear-gradient(180deg, #0b0d12 0%, #06070a 54%, #040507 100%),
     var(--page);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -42,10 +44,10 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 88px 88px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.76), transparent 78%);
+    linear-gradient(rgba(220, 230, 244, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(220, 230, 244, 0.022) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 72%);
 }
 
 img {
@@ -69,7 +71,7 @@ code {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(101, 230, 194, 0.72);
+  outline: 3px solid rgba(138, 184, 255, 0.78);
   outline-offset: 4px;
 }
 
@@ -79,17 +81,17 @@ code {
   z-index: 20;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 18px;
+  gap: 12px;
   align-items: center;
-  width: min(1180px, calc(100% - 32px));
-  min-height: 66px;
-  margin: 18px auto 0;
-  padding: 10px 12px 10px 16px;
+  width: min(1120px, calc(100% - 28px));
+  min-height: 58px;
+  margin: 12px auto 0;
+  padding: 8px 10px 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgba(9, 14, 18, 0.68);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(22px);
+  border-radius: 18px;
+  background: rgba(8, 10, 15, 0.82);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(20px);
 }
 
 .brand,
@@ -103,12 +105,14 @@ code {
 }
 
 .brand {
-  gap: 10px;
-  min-height: 44px;
+  gap: 9px;
+  min-height: 40px;
   font-weight: 750;
 }
 
 .brand img {
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
 }
 
@@ -126,15 +130,15 @@ code {
 .feature-rail a {
   min-height: 44px;
   border-radius: 999px;
-  transition: transform 220ms ease, background 220ms ease, border-color 220ms ease, color 220ms ease;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
 .primary-nav a {
   display: inline-flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 14px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -149,20 +153,21 @@ code {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 20px;
+  min-height: 42px;
+  padding: 0 18px;
   font-weight: 800;
 }
 
 .nav-action,
 .button.primary {
-  color: #04110d;
-  background: var(--accent);
+  color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
 }
 
 .button.ghost {
   border: 1px solid var(--line);
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .nav-action:hover,
@@ -175,21 +180,21 @@ code {
 
 .hero-home {
   display: grid;
-  grid-template-columns: minmax(320px, 0.82fr) minmax(460px, 1.18fr);
-  gap: clamp(28px, 4vw, 58px);
+  grid-template-columns: minmax(300px, 0.78fr) minmax(500px, 1.22fr);
+  gap: clamp(24px, 3vw, 44px);
   align-items: center;
-  width: min(1240px, calc(100% - 40px));
-  min-height: calc(100svh - 104px);
+  width: min(1160px, calc(100% - 36px));
+  min-height: min(700px, calc(100svh - 82px));
   margin: 0 auto;
-  padding: clamp(52px, 8vw, 104px) 0 54px;
+  padding: 42px 0 30px;
 }
 
 .hero-copy {
-  max-width: 520px;
+  max-width: 480px;
 }
 
 .kicker {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: var(--accent);
   font-size: 12px;
   font-weight: 850;
@@ -204,19 +209,19 @@ p {
 }
 
 h1 {
-  font-size: 104px;
-  line-height: 0.84;
+  font-size: 88px;
+  line-height: 0.88;
   letter-spacing: 0;
 }
 
 .page-hero h1 {
   max-width: 980px;
-  font-size: 92px;
+  font-size: 72px;
   line-height: 0.95;
 }
 
 h2 {
-  font-size: 52px;
+  font-size: 44px;
   line-height: 1.02;
   letter-spacing: 0;
 }
@@ -227,17 +232,17 @@ h2 {
 .install-flow p,
 .release-grid p {
   color: var(--muted);
-  font-size: 21px;
+  font-size: 18px;
 }
 
 .hero-line {
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .action-row {
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 34px;
+  gap: 10px;
+  margin-top: 26px;
 }
 
 .screenshot-stage,
@@ -245,53 +250,53 @@ h2 {
 .install-panel {
   position: relative;
   border: 1px solid var(--line-strong);
-  border-radius: clamp(28px, 4vw, 48px);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  border-radius: clamp(22px, 3vw, 34px);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.035));
   box-shadow: var(--shadow);
   overflow: hidden;
   backdrop-filter: blur(26px);
 }
 
 .screenshot-stage {
-  padding: clamp(12px, 1.7vw, 22px);
-  animation: stage-in 780ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  padding: clamp(10px, 1.2vw, 16px);
+  animation: stage-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .screenshot-stage img,
 .shot-frame img,
 .install-panel img {
-  border-radius: clamp(20px, 3vw, 36px);
+  border-radius: clamp(16px, 2vw, 26px);
 }
 
 .stage-caption {
   position: absolute;
-  right: 30px;
-  bottom: 28px;
+  right: 22px;
+  bottom: 20px;
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.50);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
+  background: rgba(3, 6, 12, 0.66);
+  color: rgba(244, 247, 251, 0.86);
+  font-size: 12px;
   font-weight: 750;
   backdrop-filter: blur(14px);
 }
 
 .route-strip {
-  gap: 12px;
-  width: min(1180px, calc(100% - 40px));
-  margin: 0 auto clamp(70px, 9vw, 120px);
+  gap: 10px;
+  width: min(1120px, calc(100% - 36px));
+  margin: 0 auto 62px;
 }
 
 .route-strip a {
   flex: 1;
   min-width: 0;
-  padding: 20px;
+  padding: 16px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .route-strip span,
@@ -306,26 +311,26 @@ h2 {
 .route-strip strong,
 .feature-rail strong {
   display: block;
-  margin-top: 6px;
-  font-size: 20px;
+  margin-top: 5px;
+  font-size: 18px;
 }
 
 .route-strip small {
   display: block;
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .page-main {
-  width: min(1180px, calc(100% - 40px));
+  width: min(1120px, calc(100% - 36px));
   margin: 0 auto;
-  padding: clamp(70px, 9vw, 120px) 0 clamp(70px, 10vw, 140px);
+  padding: 48px 0 78px;
 }
 
 .page-hero {
   max-width: 1030px;
-  padding-bottom: clamp(44px, 7vw, 84px);
+  padding-bottom: 34px;
 }
 
 .page-hero.narrow {
@@ -334,29 +339,29 @@ h2 {
 
 .page-hero p {
   max-width: 720px;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 .shot-lab {
   display: grid;
-  grid-template-columns: minmax(280px, 0.55fr) minmax(420px, 1fr);
-  gap: clamp(28px, 5vw, 70px);
+  grid-template-columns: minmax(260px, 0.48fr) minmax(480px, 1fr);
+  gap: clamp(22px, 3vw, 38px);
   align-items: center;
-  padding: clamp(22px, 4vw, 42px);
+  padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 34px;
-  background: rgba(255, 255, 255, 0.055);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.042);
 }
 
 .shot-copy p {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .segmented {
   display: inline-flex;
   gap: 6px;
-  margin-top: 28px;
-  padding: 6px;
+  margin-top: 20px;
+  padding: 5px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.20);
@@ -364,7 +369,8 @@ h2 {
 
 .segmented button {
   border: 0;
-  padding: 0 16px;
+  min-height: 38px;
+  padding: 0 14px;
   color: var(--muted);
   background: transparent;
   font: inherit;
@@ -374,12 +380,12 @@ h2 {
 }
 
 .segmented button.is-active {
-  color: #07120f;
-  background: var(--accent);
+  color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
 }
 
 .shot-frame {
-  padding: 12px;
+  padding: 10px;
 }
 
 .shot-frame img {
@@ -393,50 +399,50 @@ h2 {
 
 .feature-rail,
 .release-links {
-  gap: 12px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .feature-rail a,
 .release-links a {
   flex: 1;
-  padding: 22px;
+  padding: 18px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .install-flow {
   display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(420px, 1fr);
-  gap: clamp(26px, 5vw, 70px);
+  grid-template-columns: minmax(280px, 0.78fr) minmax(460px, 1fr);
+  gap: clamp(22px, 3vw, 42px);
   align-items: start;
 }
 
 .install-flow ol {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .install-flow li {
-  padding: 22px;
+  padding: 16px 18px;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.055);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .install-flow span {
-  color: var(--warm);
+  color: var(--accent);
   font-size: 12px;
   font-weight: 850;
 }
 
 .install-flow strong {
   display: block;
-  margin-top: 8px;
-  font-size: 22px;
+  margin-top: 6px;
+  font-size: 20px;
 }
 
 .install-flow p {
@@ -445,29 +451,29 @@ h2 {
 }
 
 .install-panel {
-  padding: 12px;
+  padding: 10px;
 }
 
 .release-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .release-grid article {
-  min-height: 360px;
-  padding: clamp(28px, 4vw, 44px);
+  min-height: 260px;
+  padding: 28px;
   border: 1px solid var(--line);
-  border-radius: 30px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .release-grid h2 {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .release-grid p {
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
 .site-footer {
@@ -475,9 +481,9 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  width: min(1180px, calc(100% - 40px));
+  width: min(1120px, calc(100% - 36px));
   margin: 0 auto;
-  padding: 34px 0 44px;
+  padding: 26px 0 34px;
   color: var(--muted);
   border-top: 1px solid var(--line);
 }
@@ -493,8 +499,8 @@ h2 {
 
 .js .reveal {
   opacity: 0;
-  transform: translateY(18px);
-  transition: opacity 520ms ease, transform 520ms ease;
+  transform: translateY(14px);
+  transition: opacity 360ms ease, transform 360ms ease;
 }
 
 .js .reveal.is-visible {
@@ -505,7 +511,7 @@ h2 {
 @keyframes stage-in {
   from {
     opacity: 0;
-    transform: translateY(28px) scale(0.985);
+    transform: translateY(20px) scale(0.988);
   }
   to {
     opacity: 1;
@@ -515,11 +521,11 @@ h2 {
 
 @media (min-width: 1320px) {
   h1 {
-    font-size: 132px;
+    font-size: 112px;
   }
 
   h2 {
-    font-size: 56px;
+    font-size: 48px;
   }
 
   .screenshot-stage {
@@ -558,7 +564,7 @@ h2 {
   }
 
   .hero-home {
-    padding-top: 56px;
+    padding-top: 40px;
   }
 
   .screenshot-stage {
@@ -566,15 +572,15 @@ h2 {
   }
 
   h1 {
-    font-size: 84px;
+    font-size: 72px;
   }
 
   .page-hero h1 {
-    font-size: 66px;
+    font-size: 56px;
   }
 
   h2 {
-    font-size: 42px;
+    font-size: 38px;
   }
 
   .route-strip,
@@ -593,13 +599,13 @@ h2 {
   .route-strip,
   .page-main,
   .site-footer {
-    width: min(100% - 28px, 1180px);
+    width: min(100% - 24px, 1120px);
   }
 
   .site-shell {
     grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 14px;
+    gap: 8px;
+    padding: 12px;
   }
 
   .primary-nav {
@@ -622,27 +628,27 @@ h2 {
   }
 
   h1 {
-    font-size: 64px;
+    font-size: 56px;
   }
 
   .page-hero h1 {
-    font-size: 48px;
+    font-size: 42px;
   }
 
   h2 {
-    font-size: 34px;
+    font-size: 30px;
   }
 
   .hero-line,
   .page-hero p,
   .shot-copy p,
   .release-grid p {
-    font-size: 18px;
+    font-size: 16px;
   }
 
   .stage-caption {
-    right: 18px;
-    bottom: 18px;
+    right: 14px;
+    bottom: 14px;
   }
 
   .route-strip a,
