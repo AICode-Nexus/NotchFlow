@@ -25,6 +25,7 @@ final class NotchPanelController: ObservableObject {
     private let localAppSearch: LocalAppSearchService
     private let chargeLimit: ChargeLimitService
     private let aiTokenUsage: AITokenUsageService
+    private let screenHealth: ScreenHealthService
 
     private let frameAnimationDuration: TimeInterval = 0.22
     private let minimumHoverOpenDelay: TimeInterval = 0.20
@@ -56,7 +57,8 @@ final class NotchPanelController: ObservableObject {
         scriptShortcuts: ScriptShortcutStore,
         localAppSearch: LocalAppSearchService,
         chargeLimit: ChargeLimitService,
-        aiTokenUsage: AITokenUsageService
+        aiTokenUsage: AITokenUsageService,
+        screenHealth: ScreenHealthService
     ) {
         self.settings = settings
         self.nowPlaying = nowPlaying
@@ -68,6 +70,7 @@ final class NotchPanelController: ObservableObject {
         self.localAppSearch = localAppSearch
         self.chargeLimit = chargeLimit
         self.aiTokenUsage = aiTokenUsage
+        self.screenHealth = screenHealth
     }
 
     func start() {
@@ -164,6 +167,7 @@ final class NotchPanelController: ObservableObject {
         weather.refreshIfNeeded()
         battery.refreshIfNeeded(maximumAge: 60)
         aiTokenUsage.refreshIfNeeded()
+        screenHealth.refreshNow()
         updateNowPlayingCadence()
     }
 
@@ -331,6 +335,13 @@ final class NotchPanelController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        settings.$screenHealthEnabled
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.scheduleLayoutRefresh(syncVisibility: true, animateFrame: true)
+            }
+            .store(in: &cancellables)
+
         settings.$quickLaunchLayoutMode
             .removeDuplicates()
             .sink { [weak self] _ in
@@ -424,7 +435,8 @@ final class NotchPanelController: ObservableObject {
             scriptShortcuts: scriptShortcuts,
             localAppSearch: localAppSearch,
             chargeLimit: chargeLimit,
-            aiTokenUsage: aiTokenUsage
+            aiTokenUsage: aiTokenUsage,
+            screenHealth: screenHealth
         )
         let hostingController = NSHostingController(rootView: rootView)
         hostingController.view.frame = NSRect(origin: .zero, size: compactPanelSize)
@@ -518,6 +530,7 @@ final class NotchPanelController: ObservableObject {
             || settings.clipboardHistoryEnabled
             || settings.wallpaperRefreshEnabled
             || settings.aiTokenUsageEnabled
+            || settings.screenHealthEnabled
             || !scriptShortcuts.shortcuts.isEmpty
         var sectionHeights: [CGFloat] = []
 
@@ -569,6 +582,7 @@ final class NotchPanelController: ObservableObject {
             settings.deviceBatteryEnabled ? metrics.moduleUnitSize : nil,
             settings.wallpaperRefreshEnabled ? metrics.moduleUnitSize : nil,
             settings.aiTokenUsageEnabled ? aiTokenUsageModuleWidth : nil,
+            settings.screenHealthEnabled ? screenHealthModuleWidth : nil,
             settings.clipboardHistoryEnabled ? clipboardModuleWidth : nil,
             scriptShortcuts.shortcuts.isEmpty ? nil : quickLaunchModuleWidth,
         ].compactMap { $0 }
@@ -590,6 +604,10 @@ final class NotchPanelController: ObservableObject {
 
     private var aiTokenUsageModuleWidth: CGFloat {
         panelMetrics.moduleUnitSize * 2
+    }
+
+    private var screenHealthModuleWidth: CGFloat {
+        panelMetrics.moduleUnitSize * 1.5
     }
 
     private func preferredScreen(using strategy: ScreenSelectionStrategy) -> NSScreen? {

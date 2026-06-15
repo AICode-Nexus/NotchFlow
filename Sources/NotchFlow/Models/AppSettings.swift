@@ -129,6 +129,31 @@ enum WallpaperRefreshIntervalPreset: Int, CaseIterable, Identifiable {
     }
 }
 
+enum ScreenBreakReminderThresholdPreset: Int, CaseIterable, Identifiable {
+    case twentyMinutes = 20
+    case fortyFiveMinutes = 45
+    case sixtyMinutes = 60
+
+    var id: Self {
+        self
+    }
+
+    var title: String {
+        switch self {
+        case .twentyMinutes:
+            return "20 分钟"
+        case .fortyFiveMinutes:
+            return "45 分钟"
+        case .sixtyMinutes:
+            return "60 分钟"
+        }
+    }
+
+    var timeInterval: TimeInterval {
+        TimeInterval(rawValue * 60)
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
     private enum Keys {
@@ -148,6 +173,9 @@ final class AppSettings: ObservableObject {
         static let aiTokenUsageEnabled = "AITokenUsageEnabled"
         static let nowPlayingEnabled = "NowPlayingEnabled"
         static let logRetentionPreset = "LogRetentionPreset"
+        static let screenHealthEnabled = "ScreenHealthEnabled"
+        static let screenBreakReminderEnabled = "ScreenBreakReminderEnabled"
+        static let screenBreakReminderThresholdPreset = "ScreenBreakReminderThresholdPreset"
     }
 
     @Published var hoverToExpand: Bool {
@@ -246,6 +274,27 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    @Published var screenHealthEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(screenHealthEnabled, forKey: Keys.screenHealthEnabled)
+        }
+    }
+
+    @Published var screenBreakReminderEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(screenBreakReminderEnabled, forKey: Keys.screenBreakReminderEnabled)
+        }
+    }
+
+    @Published var screenBreakReminderThresholdPreset: ScreenBreakReminderThresholdPreset {
+        didSet {
+            UserDefaults.standard.set(
+                screenBreakReminderThresholdPreset.rawValue,
+                forKey: Keys.screenBreakReminderThresholdPreset
+            )
+        }
+    }
+
     let chargeLimitMax: Int = 80
     let chargeLimitMin: Int = 75
 
@@ -316,6 +365,21 @@ final class AppSettings: ObservableObject {
             defaults.set(LogRetentionPreset.thirtyDays.rawValue, forKey: Keys.logRetentionPreset)
         }
 
+        if defaults.object(forKey: Keys.screenHealthEnabled) == nil {
+            defaults.set(true, forKey: Keys.screenHealthEnabled)
+        }
+
+        if defaults.object(forKey: Keys.screenBreakReminderEnabled) == nil {
+            defaults.set(true, forKey: Keys.screenBreakReminderEnabled)
+        }
+
+        if defaults.object(forKey: Keys.screenBreakReminderThresholdPreset) == nil {
+            defaults.set(
+                ScreenBreakReminderThresholdPreset.fortyFiveMinutes.rawValue,
+                forKey: Keys.screenBreakReminderThresholdPreset
+            )
+        }
+
         hoverToExpand = defaults.bool(forKey: Keys.hoverToExpand)
         autoHideDelay = defaults.double(forKey: Keys.autoHideDelay)
         weatherEnabled = defaults.bool(forKey: Keys.weatherEnabled)
@@ -342,5 +406,10 @@ final class AppSettings: ObservableObject {
         logRetentionPreset = LogRetentionPreset(
             rawValue: defaults.integer(forKey: Keys.logRetentionPreset)
         ) ?? .thirtyDays
+        screenHealthEnabled = defaults.bool(forKey: Keys.screenHealthEnabled)
+        screenBreakReminderEnabled = defaults.bool(forKey: Keys.screenBreakReminderEnabled)
+        screenBreakReminderThresholdPreset = ScreenBreakReminderThresholdPreset(
+            rawValue: defaults.integer(forKey: Keys.screenBreakReminderThresholdPreset)
+        ) ?? .fortyFiveMinutes
     }
 }

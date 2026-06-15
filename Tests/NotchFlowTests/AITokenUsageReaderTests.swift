@@ -3,6 +3,33 @@ import Foundation
 import XCTest
 
 final class AITokenUsageReaderTests: XCTestCase {
+    @MainActor
+    func testRefreshReturnsBeforeSlowReadersFinish() async throws {
+        let defaults = UserDefaults(suiteName: "NotchFlowTests-\(UUID().uuidString)")!
+        defaults.set(true, forKey: "AITokenUsageEnabled")
+        let settings = AppSettings(defaults: defaults)
+        let service = AITokenUsageService(
+            settings: settings,
+            readers: [SlowAITokenUsageReader(delay: 0.25)],
+            calendar: utcCalendar
+        )
+
+        let startedAt = Date()
+        service.refresh()
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        XCTAssertLessThan(elapsed, 0.05)
+        XCTAssertTrue(service.isRefreshing)
+
+        let deadline = Date().addingTimeInterval(1)
+        while service.isRefreshing && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertFalse(service.isRefreshing)
+        XCTAssertEqual(service.summary.sourceStatuses.first?.state, .detected)
+    }
+
     func testCodexReaderAggregatesTokenCountEventsByLocalDayAndIgnoresMalformedLines() throws {
         let fixture = try TemporaryFixture()
         let rolloutDirectory = fixture.url
@@ -98,6 +125,20 @@ final class AITokenUsageReaderTests: XCTestCase {
 
     private func date(_ isoString: String) -> Date {
         ISO8601DateFormatter.notchFlowInternetDate.date(from: isoString)!
+    }
+}
+
+private struct SlowAITokenUsageReader: AITokenUsageSourceReading {
+    let sourceID: AITokenUsageSourceID = .cursor
+    let delay: TimeInterval
+
+    func read(since startDate: Date) -> AITokenUsageSourceReadResult {
+        Thread.sleep(forTimeInterval: delay)
+        return AITokenUsageSourceReadResult(
+            sourceID: sourceID,
+            status: AITokenUsageSourceStatus(id: sourceID, state: .detected, message: "done"),
+            events: []
+        )
     }
 }
 

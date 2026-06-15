@@ -60,3 +60,29 @@ enum CompactWeatherBatteryPresentation {
         return "\(Int(measurement))°"
     }
 }
+
+enum WeatherPanelPresentation {
+    static func locationConditionText(for snapshot: WeatherSnapshot) -> String {
+        guard snapshot.hasContent else {
+            return ""
+        }
+
+        let locationName = cleaned(snapshot.locationName)
+        let conditionName = cleaned(snapshot.conditionName)
+
+        guard let locationName, locationName != "当前位置" else {
+            return conditionName ?? ""
+        }
+
+        guard let conditionName else {
+            return locationName
+        }
+
+        return "\(locationName) · \(conditionName)"
+    }
+
+    private static func cleaned(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}

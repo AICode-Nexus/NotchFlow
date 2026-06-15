@@ -175,67 +175,59 @@ struct NotchPanelStyle {
     }
 
     var panelShadowColor: Color {
-        if isAttachedToNotch {
-            return .clear
-        }
-
-        if isDarkMode {
-            return .black.opacity(0.18)
-        }
-
-        return .black.opacity(0.12)
+        .clear
     }
 
     var panelMaterial: NSVisualEffectView.Material {
         isDarkMode ? .hudWindow : .underWindowBackground
     }
 
-    var panelBackgroundTint: Color {
+    var panelBaseFill: Color {
         if isDarkMode {
-            return Color.black.opacity(isAttachedToNotch ? 0.18 : 0.24)
+            return Color(red: 0.13, green: 0.13, blue: 0.13)
         }
 
-        return Color.white.opacity(isAttachedToNotch ? 0.16 : 0.24)
+        return Color(red: 0.94, green: 0.95, blue: 0.95)
+    }
+
+    var panelBackgroundTint: Color {
+        if isDarkMode {
+            return Color.black.opacity(0.04)
+        }
+
+        return Color.white.opacity(0.08)
     }
 
     var panelBackgroundGradient: LinearGradient {
         LinearGradient(
             colors: isDarkMode
                 ? [
-                    Color.white.opacity(0.05),
+                    Color.white.opacity(0.06),
                     Color.white.opacity(0.02),
-                    Color.black.opacity(0.12),
+                    Color.black.opacity(0.08),
                 ]
                 : [
-                    Color.white.opacity(0.24),
-                    Color.white.opacity(0.12),
-                    Color.black.opacity(0.04),
+                    Color.white.opacity(0.20),
+                    Color.white.opacity(0.08),
+                    Color.black.opacity(0.03),
                 ],
             startPoint: .top,
             endPoint: .bottom
         )
     }
 
-    var attachedBaseColor: Color {
-        if isDarkMode {
-            return Color(red: 0.26, green: 0.33, blue: 0.22)
-        }
-
-        return Color(red: 0.80, green: 0.88, blue: 0.72)
-    }
-
     var attachedOverlayGradient: LinearGradient {
         LinearGradient(
             colors: isDarkMode
                 ? [
-                    Color.white.opacity(0.10),
+                    Color.white.opacity(0.08),
                     Color.white.opacity(0.03),
-                    Color.black.opacity(0.16),
+                    Color.black.opacity(0.08),
                 ]
                 : [
-                    Color.white.opacity(0.26),
-                    Color.white.opacity(0.12),
-                    Color.black.opacity(0.04),
+                    Color.white.opacity(0.20),
+                    Color.white.opacity(0.08),
+                    Color.black.opacity(0.03),
                 ],
             startPoint: .top,
             endPoint: .bottom
@@ -303,6 +295,7 @@ struct NotchPanelView: View {
     @ObservedObject var localAppSearch: LocalAppSearchService
     @ObservedObject var chargeLimit: ChargeLimitService
     @ObservedObject var aiTokenUsage: AITokenUsageService
+    @ObservedObject var screenHealth: ScreenHealthService
     @State private var isClipboardListPresented = false
     @State private var isQuickLaunchEditing = false
     @State private var draggedQuickLaunchShortcutID: UUID?
@@ -383,6 +376,10 @@ struct NotchPanelView: View {
         moduleUnitSize * 2
     }
 
+    private var screenHealthModuleWidth: CGFloat {
+        moduleUnitSize * 1.5
+    }
+
     private var quickLaunchUsesCarouselLayout: Bool {
         settings.quickLaunchLayoutMode == .carousel
     }
@@ -409,6 +406,7 @@ struct NotchPanelView: View {
             shouldShowBatterySection ? batteryModuleWidth : nil,
             shouldShowWallpaperSection ? wallpaperModuleWidth : nil,
             shouldShowAITokenUsageSection ? aiTokenUsageModuleWidth : nil,
+            shouldShowScreenHealthSection ? screenHealthModuleWidth : nil,
             shouldShowClipboardSection ? clipboardModuleWidth : nil,
             shouldShowQuickLaunchSection ? quickLaunchModuleWidth : nil,
         ].compactMap { $0 }
@@ -429,6 +427,7 @@ struct NotchPanelView: View {
             shouldShowBatterySection ? "battery" : nil,
             shouldShowWallpaperSection ? "wallpaper" : nil,
             shouldShowAITokenUsageSection ? "aiUsage" : nil,
+            shouldShowScreenHealthSection ? "screenHealth" : nil,
             shouldShowClipboardSection ? "clipboard" : nil,
             shouldShowQuickLaunchSection ? "quickLaunch" : nil,
             quickLaunchUsesCarouselLayout ? "carousel" : "grid",
@@ -442,6 +441,10 @@ struct NotchPanelView: View {
             "\(aiTokenUsage.todayTotalTokens)",
             aiTokenUsage.statusMessage,
             aiTokenUsage.isRefreshing ? "aiRefreshing" : nil,
+            "\(screenHealth.snapshot.todayActiveSeconds)",
+            "\(screenHealth.snapshot.continuousActiveSeconds)",
+            "\(screenHealth.snapshot.healthScore)",
+            screenHealth.snapshot.status.rawValue,
             "\(scriptShortcuts.shortcuts.count)",
         ]
             .compactMap { $0 }
@@ -495,43 +498,42 @@ struct NotchPanelView: View {
 
     @ViewBuilder
     private var surfaceBackground: some View {
-        if panelController.isAttachedToNotch {
-            panelShape
-                .fill(style.attachedBaseColor)
-                .overlay {
-                    panelShape.fill(style.attachedOverlayGradient)
-                }
-                .overlay {
-                    panelShape.fill(style.panelBackgroundTint)
-                }
-        } else {
-            VisualEffectView(
-                material: style.panelMaterial,
-                blendingMode: .withinWindow,
-                appearanceName: style.visualEffectAppearanceName
-            )
-                .overlay {
-                    panelShape.fill(style.panelBackgroundTint)
-                }
-                .overlay {
-                    panelShape.fill(style.panelBackgroundGradient)
-                }
-                .clipShape(panelShape)
-        }
+        panelShape
+            .fill(style.panelBaseFill)
+            .overlay {
+                panelShape.fill(style.panelBackgroundTint)
+            }
+            .overlay {
+                panelShape.fill(
+                    panelController.isAttachedToNotch
+                        ? style.attachedOverlayGradient
+                        : style.panelBackgroundGradient
+                )
+            }
+            .clipShape(panelShape)
     }
 
     private var panelShape: NotchSurfaceShape {
-        let bottomRadius = panelController.isExpanded
-            ? 26.0
-            : min(panelController.compactPanelSize.height / 2, 14.0)
-        let topRadius = panelController.isAttachedToNotch
-            ? (panelController.isExpanded ? 12.0 : 6.0)
-            : bottomRadius
-
         return NotchSurfaceShape(
-            topCornerRadius: topRadius,
-            bottomCornerRadius: bottomRadius
+            topCornerRadius: panelTopCornerRadius,
+            bottomCornerRadius: panelBottomCornerRadius
         )
+    }
+
+    private var panelTopCornerRadius: CGFloat {
+        if panelController.isAttachedToNotch {
+            return panelController.isExpanded ? 12.0 : 6.0
+        }
+
+        return panelBottomCornerRadius
+    }
+
+    private var panelBottomCornerRadius: CGFloat {
+        if panelController.isExpanded {
+            return 26.0
+        }
+
+        return min(panelController.compactPanelSize.height / 2, 14.0)
     }
 
     private var compactView: some View {
@@ -656,14 +658,9 @@ struct NotchPanelView: View {
 
                 Spacer()
 
-                Button {
+                refreshIconButton(isRefreshing: nowPlaying.isRefreshing, help: "刷新媒体状态") {
                     nowPlaying.refresh()
-                } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
-                        .font(panelFont(12, weight: .medium))
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(panelSecondaryTextColor)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -690,6 +687,11 @@ struct NotchPanelView: View {
 
                 if shouldShowAITokenUsageSection {
                     aiTokenUsageSection
+                        .transition(moduleCardTransition)
+                }
+
+                if shouldShowScreenHealthSection {
+                    screenHealthSection
                         .transition(moduleCardTransition)
                 }
 
@@ -789,6 +791,21 @@ struct NotchPanelView: View {
         .frame(height: moduleHeaderHeight, alignment: .center)
     }
 
+    private func refreshIconButton(
+        isRefreshing: Bool,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        RefreshIconButton(
+            isRefreshing: isRefreshing,
+            font: panelFont(11, weight: .semibold),
+            foregroundColor: moduleSecondaryTextColor,
+            activeFillColor: style.controlFillColor,
+            action: action
+        )
+        .help(help)
+    }
+
     private var weatherSection: some View {
         moduleCard(width: weatherModuleWidth) {
             if weather.snapshot.hasContent {
@@ -806,10 +823,11 @@ struct NotchPanelView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
 
-                Text(weather.snapshot.conditionName)
+                Text(WeatherPanelPresentation.locationConditionText(for: weather.snapshot))
                     .font(panelFont(12, weight: .semibold))
                     .foregroundStyle(moduleSecondaryTextColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .padding(.top, 2)
 
                 Spacer(minLength: 4)
@@ -844,7 +862,7 @@ struct NotchPanelView: View {
                 Spacer(minLength: 4)
 
                 HStack {
-                    if weather.authorizationStatus == .notDetermined {
+                    if weather.locationServicesEnabled, weather.authorizationStatus == .notDetermined {
                         Button {
                             weather.requestLocationAuthorization()
                         } label: {
@@ -857,14 +875,9 @@ struct NotchPanelView: View {
 
                     Spacer(minLength: 0)
 
-                    Button {
+                    refreshIconButton(isRefreshing: weather.isLoading, help: "刷新天气") {
                         weather.refresh(force: true)
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(panelFont(11, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(moduleSecondaryTextColor)
                 }
             }
         }
@@ -996,25 +1009,17 @@ struct NotchPanelView: View {
     private var wallpaperSection: some View {
         moduleCard(width: wallpaperModuleWidth) {
             moduleHeader("壁纸", systemImage: "photo.on.rectangle.angled") {
-                if wallpaper.isRefreshing {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(moduleSecondaryTextColor)
-                        .scaleEffect(0.65)
-                } else if settings.wallpaperAutoRefreshEnabled {
+                if settings.wallpaperAutoRefreshEnabled {
                     Image(systemName: "timer")
                         .font(panelFont(11, weight: .semibold))
                         .foregroundStyle(moduleSecondaryTextColor)
                 } else {
-                    Button {
+                    refreshIconButton(
+                        isRefreshing: wallpaper.isRefreshing,
+                        help: wallpaper.selectedDirectoryURL == nil ? "选择壁纸文件夹" : "刷新壁纸"
+                    ) {
                         wallpaper.refreshOrChooseFolder()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(panelFont(11, weight: .semibold))
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(moduleSecondaryTextColor)
-                    .help(wallpaper.selectedDirectoryURL == nil ? "选择壁纸文件夹" : "刷新壁纸")
                 }
             }
 
@@ -1051,21 +1056,8 @@ struct NotchPanelView: View {
     private var aiTokenUsageSection: some View {
         moduleCard(width: aiTokenUsageModuleWidth) {
             moduleHeader("AI 用量", systemImage: "sparkles") {
-                if aiTokenUsage.isRefreshing {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(moduleSecondaryTextColor)
-                        .scaleEffect(0.65)
-                } else {
-                    Button {
-                        aiTokenUsage.refresh()
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(panelFont(11, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(moduleSecondaryTextColor)
-                    .help("刷新 AI token 用量")
+                refreshIconButton(isRefreshing: aiTokenUsage.isRefreshing, help: "刷新 AI token 用量") {
+                    aiTokenUsage.refresh()
                 }
             }
 
@@ -1158,6 +1150,75 @@ struct NotchPanelView: View {
             Spacer(minLength: 0)
         }
         .frame(height: 22)
+    }
+
+    private var screenHealthSection: some View {
+        moduleCard(width: screenHealthModuleWidth) {
+            moduleHeader("屏幕健康", systemImage: "eye") {
+                Image(systemName: screenHealthHeaderSymbolName)
+                    .font(panelFont(11, weight: .semibold))
+                    .foregroundStyle(screenHealthAccentColor)
+            }
+
+            Spacer(minLength: 5)
+
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(screenHealth.snapshot.healthScore)")
+                    .font(panelFont(26, weight: .bold))
+                    .foregroundStyle(screenHealthAccentColor)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Text("分")
+                    .font(panelFont(12, weight: .semibold))
+                    .foregroundStyle(moduleSecondaryTextColor)
+            }
+
+            Text(screenHealth.snapshot.status.title)
+                .font(panelFont(12, weight: .semibold))
+                .foregroundStyle(moduleSecondaryTextColor)
+                .lineLimit(1)
+
+            Spacer(minLength: 5)
+
+            HStack(spacing: 6) {
+                screenHealthMetricTile(
+                    title: "今日",
+                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.todayActiveSeconds)
+                )
+                screenHealthMetricTile(
+                    title: "连续",
+                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.continuousActiveSeconds)
+                )
+            }
+
+            if screenHealth.snapshot.shouldShowRestReminder {
+                Text("看远处，活动一下")
+                    .font(panelFont(11, weight: .medium))
+                    .foregroundStyle(screenHealthAccentColor)
+                    .lineLimit(1)
+                    .padding(.top, 4)
+            }
+        }
+    }
+
+    private func screenHealthMetricTile(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(panelFont(10, weight: .medium))
+                .foregroundStyle(moduleTertiaryTextColor)
+                .lineLimit(1)
+
+            Text(value)
+                .font(panelFont(11, weight: .semibold))
+                .foregroundStyle(moduleSecondaryTextColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, minHeight: 25, alignment: .leading)
+        .background(moduleTileBackgroundColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var clipboardHistoryPopover: some View {
@@ -1872,7 +1933,11 @@ struct NotchPanelView: View {
 
     @ViewBuilder
     private var compactAccessory: some View {
-        if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
+        if settings.screenHealthEnabled, screenHealth.snapshot.shouldShowRestReminder {
+            Image(systemName: "timer")
+                .font(panelFont(10, weight: .semibold))
+                .foregroundStyle(screenHealthAccentColor)
+        } else if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             Circle()
                 .fill(nowPlaying.snapshot.isPlaying ? style.positiveIndicatorColor : style.inactiveIndicatorColor)
                 .frame(width: 7, height: 7)
@@ -1921,6 +1986,13 @@ struct NotchPanelView: View {
     }
 
     private var compactSymbolName: String {
+        if let screenHealthSymbol = ScreenHealthCompactPresentation.symbolName(
+            isEnabled: settings.screenHealthEnabled,
+            snapshot: screenHealth.snapshot
+        ) {
+            return screenHealthSymbol
+        }
+
         if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             return "waveform"
         }
@@ -1954,6 +2026,13 @@ struct NotchPanelView: View {
     }
 
     private var compactTitle: String {
+        if let screenHealthTitle = ScreenHealthCompactPresentation.title(
+            isEnabled: settings.screenHealthEnabled,
+            snapshot: screenHealth.snapshot
+        ) {
+            return screenHealthTitle
+        }
+
         if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             return nowPlaying.snapshot.title
         }
@@ -2031,11 +2110,16 @@ struct NotchPanelView: View {
         settings.aiTokenUsageEnabled
     }
 
+    private var shouldShowScreenHealthSection: Bool {
+        settings.screenHealthEnabled
+    }
+
     private var shouldShowModuleRow: Bool {
         shouldShowWeatherSection
             || shouldShowBatterySection
             || shouldShowWallpaperSection
             || shouldShowAITokenUsageSection
+            || shouldShowScreenHealthSection
             || shouldShowClipboardSection
             || shouldShowQuickLaunchSection
     }
@@ -2102,7 +2186,37 @@ struct NotchPanelView: View {
         }
     }
 
+    private var screenHealthAccentColor: Color {
+        switch screenHealth.snapshot.status {
+        case .normal:
+            return Color(red: 0.54, green: 0.85, blue: 0.58)
+        case .nearingBreak:
+            return Color(red: 0.95, green: 0.76, blue: 0.31)
+        case .breakDue:
+            return Color(red: 0.96, green: 0.49, blue: 0.27)
+        case .resting:
+            return style.chargingAccent
+        }
+    }
+
+    private var screenHealthHeaderSymbolName: String {
+        switch screenHealth.snapshot.status {
+        case .normal:
+            return "checkmark.circle.fill"
+        case .nearingBreak:
+            return "timer"
+        case .breakDue:
+            return "pause.circle.fill"
+        case .resting:
+            return "leaf.fill"
+        }
+    }
+
     private var weatherPlaceholderTitle: String {
+        guard weather.locationServicesEnabled else {
+            return "定位服务已关闭"
+        }
+
         switch weather.authorizationStatus {
         case .notDetermined:
             return "需要定位权限"
@@ -2246,5 +2360,71 @@ private struct NotchSurfaceShape: InsettableShape {
         var copy = self
         copy.insetAmount += amount
         return copy
+    }
+}
+
+private struct RefreshIconButton: View {
+    let isRefreshing: Bool
+    let font: Font
+    let foregroundColor: Color
+    let activeFillColor: Color
+    let action: () -> Void
+
+    @GestureState private var isPressing = false
+    @State private var rotation = 0.0
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill((isPressing || isRefreshing) ? activeFillColor : Color.clear)
+
+                if isRefreshing {
+                    Circle()
+                        .trim(from: 0.16, to: 0.82)
+                        .stroke(
+                            foregroundColor,
+                            style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                        )
+                        .frame(width: 14, height: 14)
+                        .rotationEffect(.degrees(rotation))
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(font)
+                        .foregroundStyle(foregroundColor)
+                        .frame(width: 14, height: 14)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .scaleEffect(isPressing ? 0.88 : 1.0)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .updating($isPressing) { _, state, _ in
+                    state = true
+                }
+        )
+        .onAppear {
+            updateRotation(isRefreshing)
+        }
+        .onChange(of: isRefreshing) { _, nextValue in
+            updateRotation(nextValue)
+        }
+        .animation(.easeOut(duration: 0.12), value: isPressing)
+    }
+
+    private func updateRotation(_ active: Bool) {
+        if active {
+            rotation = 0
+            withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.16)) {
+                rotation = 0
+            }
+        }
     }
 }

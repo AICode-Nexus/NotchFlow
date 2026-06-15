@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-struct MusicAppPayload {
+struct MusicAppPayload: Sendable {
     let title: String
     let artist: String
     let album: String

@@ -20,6 +20,7 @@
 		C0DEF1000000000000000002 /* WeatherKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000005 /* WeatherKit.framework */; };
 		C0DEF1000000000000000007 /* CompactWeatherBatteryPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */; };
 		C0DEF1000000000000000009 /* AITokenUsageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF100000000000000000A /* AITokenUsageService.swift */; };
+		C0DEF2000000000000000001 /* ScreenHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF2000000000000000002 /* ScreenHealthService.swift */; };
 		5D80A695687A15D49A6D8084 /* WallpaperRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D660B2722ED9C41AEE9576 /* WallpaperRefreshService.swift */; };
 		668C10665E6C77431AC78520 /* BatteryStatusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DAE1AD9A5F692D642E1B8B /* BatteryStatusService.swift */; };
 		738BC539792A9C7996ADCF34 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EE8D9876740F4498018967 /* MenuBarContentView.swift */; };
@@ -74,6 +75,7 @@
 		C0DEF1000000000000000005 /* WeatherKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WeatherKit.framework; path = ../../../../System/Library/Frameworks/WeatherKit.framework; sourceTree = "<group>"; };
 		C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompactWeatherBatteryPresentation.swift; path = Sources/NotchFlow/UI/CompactWeatherBatteryPresentation.swift; sourceTree = "<group>"; };
 		C0DEF100000000000000000A /* AITokenUsageService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AITokenUsageService.swift; path = Sources/NotchFlow/Services/AITokenUsageService.swift; sourceTree = "<group>"; };
+		C0DEF2000000000000000002 /* ScreenHealthService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScreenHealthService.swift; path = Sources/NotchFlow/Services/ScreenHealthService.swift; sourceTree = "<group>"; };
 		AD65C9F5DD564C7F01A04FD3 /* NotchPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotchPanelView.swift; path = Sources/NotchFlow/UI/NotchPanelView.swift; sourceTree = "<group>"; };
 		BDFA46DA6C5DC16B3DCD49A9 /* EffectsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EffectsView.swift; path = Sources/NotchFlow/UI/EffectsView.swift; sourceTree = "<group>"; };
 		C30B68F20D369283B0A2BCE3 /* NowPlayingSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NowPlayingSnapshot.swift; path = Sources/NotchFlow/Models/NowPlayingSnapshot.swift; sourceTree = "<group>"; };
@@ -128,6 +130,7 @@
 				D07205039C83B9735C292FCA /* NotchPanelController.swift */,
 				C49C29A6D073BE1300FF90F2 /* NowPlayingService.swift */,
 				D7537D8A328CB6142345B179 /* ScriptShortcutStore.swift */,
+				C0DEF2000000000000000002 /* ScreenHealthService.swift */,
 				E4D660B2722ED9C41AEE9576 /* WallpaperRefreshService.swift */,
 				C0DEF1000000000000000008 /* CompactWeatherBatteryPresentation.swift */,
 				BDFA46DA6C5DC16B3DCD49A9 /* EffectsView.swift */,
@@ -302,6 +305,7 @@
 				B34E569E6C9F9DDD214C1B0B /* NotchPanelController.swift in Sources */,
 				87A36B785577875E0B1D89D8 /* NowPlayingService.swift in Sources */,
 				A89D9AA93A5E36325DBAFF71 /* ScriptShortcutStore.swift in Sources */,
+				C0DEF2000000000000000001 /* ScreenHealthService.swift in Sources */,
 				5D80A695687A15D49A6D8084 /* WallpaperRefreshService.swift in Sources */,
 				C0DEF1000000000000000007 /* CompactWeatherBatteryPresentation.swift in Sources */,
 				86AD7651FF212C1C763BDE42 /* EffectsView.swift in Sources */,

@@ -87,6 +87,40 @@ struct HourlyWeatherSnapshot: Equatable, Identifiable {
     }
 }
 
+enum WeatherLocationNameFormatter {
+    static func displayName(
+        subLocality: String?,
+        locality: String?,
+        administrativeArea: String?,
+        country: String?
+    ) -> String {
+        let localParts = [
+            cleaned(subLocality),
+            cleaned(locality),
+            cleaned(administrativeArea),
+        ]
+        var uniqueParts: [String] = []
+
+        for part in localParts.compactMap({ $0 }) where !uniqueParts.contains(part) {
+            uniqueParts.append(part)
+        }
+
+        switch uniqueParts.count {
+        case 0:
+            return cleaned(country) ?? "当前位置"
+        case 1:
+            return uniqueParts[0]
+        default:
+            return uniqueParts.prefix(2).joined(separator: " · ")
+        }
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 struct WeatherAttributionSnapshot: Equatable {
     let serviceName: String
     let legalPageURL: URL?
@@ -128,6 +162,27 @@ extension WeatherSnapshot {
             uvIndex: weather.currentWeather.uvIndex.value,
             hourlyForecast: hours,
             locationName: "当前位置"
+        )
+    }
+
+    func withLocationName(_ locationName: String?) -> WeatherSnapshot {
+        WeatherSnapshot(
+            symbolName: symbolName,
+            conditionName: conditionName,
+            temperature: temperature,
+            apparentTemperature: apparentTemperature,
+            highTemperature: highTemperature,
+            lowTemperature: lowTemperature,
+            humidity: humidity,
+            windSpeed: windSpeed,
+            uvIndex: uvIndex,
+            hourlyForecast: hourlyForecast,
+            locationName: WeatherLocationNameFormatter.displayName(
+                subLocality: locationName,
+                locality: nil,
+                administrativeArea: nil,
+                country: nil
+            )
         )
     }
 }

@@ -4,6 +4,7 @@ private enum SettingsTab: Hashable {
     case general
     case weather
     case battery
+    case screenHealth
     case clipboard
     case wallpaper
     case nowPlaying
@@ -18,6 +19,8 @@ private enum SettingsTab: Hashable {
             return "天气"
         case .battery:
             return "电量"
+        case .screenHealth:
+            return "健康"
         case .clipboard:
             return "剪贴板"
         case .wallpaper:
@@ -39,6 +42,8 @@ private enum SettingsTab: Hashable {
             return "cloud.sun"
         case .battery:
             return "battery.100"
+        case .screenHealth:
+            return "eye"
         case .clipboard:
             return "doc.on.clipboard"
         case .wallpaper:
@@ -71,6 +76,10 @@ struct SettingsView: View {
             settingsForm {
                 weatherSections
             }
+            .onAppear {
+                model.weather.synchronizeAuthorizationStatus()
+                model.weather.refreshIfNeeded(maximumAge: 60)
+            }
             .tabItem {
                 Label(SettingsTab.weather.title, systemImage: SettingsTab.weather.systemImage)
             }
@@ -83,6 +92,14 @@ struct SettingsView: View {
                 Label(SettingsTab.battery.title, systemImage: SettingsTab.battery.systemImage)
             }
             .tag(SettingsTab.battery)
+
+            settingsForm {
+                screenHealthSections
+            }
+            .tabItem {
+                Label(SettingsTab.screenHealth.title, systemImage: SettingsTab.screenHealth.systemImage)
+            }
+            .tag(SettingsTab.screenHealth)
 
             settingsForm {
                 clipboardSections
@@ -136,7 +153,11 @@ struct SettingsView: View {
     }
 
     private var weatherPermissionLabel: String {
-        switch model.weather.authorizationStatus {
+        guard model.weather.locationServicesEnabled else {
+            return "系统定位关闭"
+        }
+
+        return switch model.weather.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
             "已允许"
         case .notDetermined:
@@ -160,6 +181,18 @@ struct SettingsView: View {
 
     private var aiUsageThirtyDayLabel: String {
         "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.thirtyDayTotalTokens)) token"
+    }
+
+    private var screenHealthTodayLabel: String {
+        ScreenHealthFormatter.duration(model.screenHealth.snapshot.todayActiveSeconds)
+    }
+
+    private var screenHealthContinuousLabel: String {
+        ScreenHealthFormatter.duration(model.screenHealth.snapshot.continuousActiveSeconds)
+    }
+
+    private var screenHealthScoreLabel: String {
+        ScreenHealthFormatter.score(model.screenHealth.snapshot.healthScore)
     }
 
     @ViewBuilder
@@ -272,6 +305,7 @@ struct SettingsView: View {
             )
 
             LabeledContent("定位权限", value: weatherPermissionLabel)
+            LabeledContent("定位服务", value: model.weather.locationServicesEnabled ? "已开启" : "系统已关闭")
             LabeledContent("状态", value: model.weather.statusMessage)
 
             HStack {
@@ -340,6 +374,57 @@ struct SettingsView: View {
             Text("电量达到 \(model.settings.chargeLimitMax)% 时自动停止充电，低于 \(model.settings.chargeLimitMin)% 时恢复。保护电池寿命。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var screenHealthSections: some View {
+        Section("屏幕健康") {
+            Toggle(
+                "显示屏幕健康",
+                isOn: Binding(
+                    get: { model.settings.screenHealthEnabled },
+                    set: { model.settings.screenHealthEnabled = $0 }
+                )
+            )
+
+            Toggle(
+                "休息提醒",
+                isOn: Binding(
+                    get: { model.settings.screenBreakReminderEnabled },
+                    set: { model.settings.screenBreakReminderEnabled = $0 }
+                )
+            )
+            .disabled(!model.settings.screenHealthEnabled)
+
+            Picker(
+                "提醒间隔",
+                selection: Binding(
+                    get: { model.settings.screenBreakReminderThresholdPreset },
+                    set: { model.settings.screenBreakReminderThresholdPreset = $0 }
+                )
+            ) {
+                ForEach(ScreenBreakReminderThresholdPreset.allCases) { preset in
+                    Text(preset.title).tag(preset)
+                }
+            }
+            .disabled(!model.settings.screenHealthEnabled || !model.settings.screenBreakReminderEnabled)
+
+            Text("仅统计本机醒着且最近有鼠标或键盘活动的聚合时长，不读取屏幕内容、摄像头、应用名称，也不会上传网络。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        Section("今日概览") {
+            LabeledContent("健康度", value: screenHealthScoreLabel)
+            LabeledContent("今日活跃", value: screenHealthTodayLabel)
+            LabeledContent("连续使用", value: screenHealthContinuousLabel)
+            LabeledContent("状态", value: model.screenHealth.statusMessage)
+
+            Button("立即刷新屏幕健康") {
+                model.screenHealth.refreshNow()
+            }
+            .disabled(!model.settings.screenHealthEnabled)
         }
     }
 

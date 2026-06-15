@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-enum AITokenUsageSourceID: String, CaseIterable, Identifiable, Codable {
+enum AITokenUsageSourceID: String, CaseIterable, Identifiable, Codable, Sendable {
     case codex
     case claude
     case cursor
@@ -40,7 +40,7 @@ enum AITokenUsageSourceID: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum AITokenUsageSourceState: String, Equatable, Codable {
+enum AITokenUsageSourceState: String, Equatable, Codable, Sendable {
     case available
     case detected
     case missing
@@ -63,7 +63,7 @@ enum AITokenUsageSourceState: String, Equatable, Codable {
     }
 }
 
-struct AITokenBreakdown: Equatable, Codable {
+struct AITokenBreakdown: Equatable, Codable, Sendable {
     var inputTokens: Int
     var cachedInputTokens: Int
     var cacheCreationInputTokens: Int
@@ -114,7 +114,7 @@ struct AITokenBreakdown: Equatable, Codable {
     }
 }
 
-struct AITokenUsageEvent: Equatable, Codable {
+struct AITokenUsageEvent: Equatable, Codable, Sendable {
     let sourceID: AITokenUsageSourceID
     let timestamp: Date
     let breakdown: AITokenBreakdown
@@ -122,7 +122,7 @@ struct AITokenUsageEvent: Equatable, Codable {
     let stableID: String
 }
 
-struct AITokenUsageDirectoryInfo: Equatable, Identifiable {
+struct AITokenUsageDirectoryInfo: Equatable, Identifiable, Sendable {
     let url: URL
     let displayPath: String
     let sizeText: String
@@ -130,7 +130,7 @@ struct AITokenUsageDirectoryInfo: Equatable, Identifiable {
     var id: String { url.path }
 }
 
-struct AITokenUsageSourceStatus: Equatable, Identifiable, Codable {
+struct AITokenUsageSourceStatus: Equatable, Identifiable, Codable, Sendable {
     let id: AITokenUsageSourceID
     var state: AITokenUsageSourceState
     var message: String
@@ -140,13 +140,13 @@ struct AITokenUsageSourceStatus: Equatable, Identifiable, Codable {
     }
 }
 
-struct AITokenUsageSourceReadResult: Equatable {
+struct AITokenUsageSourceReadResult: Equatable, Sendable {
     let sourceID: AITokenUsageSourceID
     let status: AITokenUsageSourceStatus
     let events: [AITokenUsageEvent]
 }
 
-struct AITokenUsageDaySummary: Equatable, Identifiable, Codable {
+struct AITokenUsageDaySummary: Equatable, Identifiable, Codable, Sendable {
     let day: Date
     var breakdown: AITokenBreakdown
     var sourceBreakdowns: [AITokenUsageSourceID: AITokenBreakdown]
@@ -156,7 +156,7 @@ struct AITokenUsageDaySummary: Equatable, Identifiable, Codable {
     }
 }
 
-struct AITokenUsageSourceSummary: Equatable, Identifiable, Codable {
+struct AITokenUsageSourceSummary: Equatable, Identifiable, Codable, Sendable {
     let id: AITokenUsageSourceID
     var breakdown: AITokenBreakdown
 
@@ -165,7 +165,7 @@ struct AITokenUsageSourceSummary: Equatable, Identifiable, Codable {
     }
 }
 
-struct AITokenUsageSummary: Equatable {
+struct AITokenUsageSummary: Equatable, Sendable {
     var daySummaries: [AITokenUsageDaySummary]
     var sourceSummaries: [AITokenUsageSourceSummary]
     var sourceStatuses: [AITokenUsageSourceStatus]
@@ -742,8 +742,8 @@ final class AITokenUsageService: ObservableObject {
     @Published private(set) var lastClearResult: String?
 
     private let settings: AppSettings
-    private let readers: [AITokenUsageSourceReading]
     private let calendar: Calendar
+    private let refreshWorker: AITokenUsageRefreshWorker
     private let refreshInterval: TimeInterval = 5 * 60
     private let historyDays = 30
     private var refreshTimer: Timer?
@@ -757,7 +757,10 @@ final class AITokenUsageService: ObservableObject {
     ) {
         self.settings = settings
         self.calendar = calendar
-        self.readers = readers ?? Self.defaultReaders()
+        refreshWorker = AITokenUsageRefreshWorker(
+            readers: readers ?? Self.defaultReaders(),
+            calendar: calendar
+        )
     }
 
     var todayTotalTokens: Int {
@@ -795,6 +798,9 @@ final class AITokenUsageService: ObservableObject {
         refreshTask = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        isRefreshing = false
         cancellables.removeAll()
     }
 
@@ -815,7 +821,10 @@ final class AITokenUsageService: ObservableObject {
 
     func refresh() {
         guard settings.aiTokenUsageEnabled else {
+            refreshTask?.cancel()
+            refreshTask = nil
             summary = .empty
+            isRefreshing = false
             statusMessage = "AI 用量统计已关闭"
             return
         }
@@ -833,28 +842,21 @@ final class AITokenUsageService: ObservableObject {
             to: calendar.startOfDay(for: Date())
         ) ?? Date(timeIntervalSinceNow: -TimeInterval(historyDays * 24 * 60 * 60))
 
-        let readers = self.readers
-        let calendar = self.calendar
+        refreshTask = Task.detached(priority: .utility) { [refreshWorker] in
+            let result = refreshWorker.refresh(since: startDate)
+            guard !Task.isCancelled else {
+                return
+            }
 
-        refreshTask?.cancel()
-        refreshTask = Task.detached(priority: .utility) {
-            let results = readers.map { $0.read(since: startDate) }
-            let nextSummary = AITokenUsageAggregator.summary(
-                from: results,
-                calendar: calendar,
-                refreshedAt: Date()
-            )
-
-            await MainActor.run {
-                guard !Task.isCancelled else {
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else {
                     return
                 }
 
-                self.summary = nextSummary
-                self.statusMessage = nextSummary.todayTotal(calendar: calendar) > 0
-                    ? "已刷新今日 AI token 用量"
-                    : "暂无今日 AI token 记录"
+                self.summary = result.summary
+                self.statusMessage = result.statusMessage
                 self.isRefreshing = false
+                self.refreshTask = nil
             }
         }
     }
@@ -877,7 +879,10 @@ final class AITokenUsageService: ObservableObject {
                 } else {
                     self.refreshTimer?.invalidate()
                     self.refreshTimer = nil
+                    self.refreshTask?.cancel()
+                    self.refreshTask = nil
                     self.summary = .empty
+                    self.isRefreshing = false
                     self.statusMessage = "AI 用量统计已关闭"
                 }
             }
@@ -1107,6 +1112,35 @@ extension ISO8601DateFormatter {
     static func notchFlowDate(from string: String) -> Date? {
         notchFlowInternetDateWithFractionalSeconds.date(from: string)
             ?? notchFlowInternetDate.date(from: string)
+    }
+}
+
+private struct AITokenUsageRefreshResult: Sendable {
+    let summary: AITokenUsageSummary
+    let statusMessage: String
+}
+
+private final class AITokenUsageRefreshWorker: @unchecked Sendable {
+    private let readers: [AITokenUsageSourceReading]
+    private let calendar: Calendar
+
+    init(readers: [AITokenUsageSourceReading], calendar: Calendar) {
+        self.readers = readers
+        self.calendar = calendar
+    }
+
+    func refresh(since startDate: Date) -> AITokenUsageRefreshResult {
+        let results = readers.map { $0.read(since: startDate) }
+        let summary = AITokenUsageAggregator.summary(
+            from: results,
+            calendar: calendar,
+            refreshedAt: Date()
+        )
+        let statusMessage = summary.todayTotal(calendar: calendar) > 0
+            ? "已刷新今日 AI token 用量"
+            : "暂无今日 AI token 记录"
+
+        return AITokenUsageRefreshResult(summary: summary, statusMessage: statusMessage)
     }
 }
 

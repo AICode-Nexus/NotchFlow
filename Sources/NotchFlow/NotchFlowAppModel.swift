@@ -17,6 +17,7 @@ final class NotchFlowAppModel: ObservableObject {
     let launchAtLogin: LaunchAtLoginManager
     let chargeLimit: ChargeLimitService
     let aiTokenUsage: AITokenUsageService
+    let screenHealth: ScreenHealthService
     let panelController: NotchPanelController
     let hotKeyManager: GlobalHotKeyManager
 
@@ -32,6 +33,7 @@ final class NotchFlowAppModel: ObservableObject {
         launchAtLogin = LaunchAtLoginManager()
         chargeLimit = ChargeLimitService(settings: settings)
         aiTokenUsage = AITokenUsageService(settings: settings)
+        screenHealth = ScreenHealthService(settings: settings)
         panelController = NotchPanelController(
             settings: settings,
             nowPlaying: nowPlaying,
@@ -42,7 +44,8 @@ final class NotchFlowAppModel: ObservableObject {
             scriptShortcuts: scriptShortcuts,
             localAppSearch: localAppSearch,
             chargeLimit: chargeLimit,
-            aiTokenUsage: aiTokenUsage
+            aiTokenUsage: aiTokenUsage,
+            screenHealth: screenHealth
         )
         hotKeyManager = GlobalHotKeyManager(
             keyCode: UInt32(kVK_Space),
@@ -75,6 +78,7 @@ final class NotchFlowAppModel: ObservableObject {
         hotKeyManager.register()
         chargeLimit.start()
         aiTokenUsage.start()
+        screenHealth.start()
 
         if ProcessInfo.processInfo.arguments.contains(Self.showPanelOnLaunchArgument) {
             Task { @MainActor in
@@ -96,6 +100,7 @@ final class NotchFlowAppModel: ObservableObject {
         hotKeyManager.unregister()
         chargeLimit.stop()
         aiTokenUsage.stop()
+        screenHealth.stop()
     }
 
     func togglePanelPinState() {

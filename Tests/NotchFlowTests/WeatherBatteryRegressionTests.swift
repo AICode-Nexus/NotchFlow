@@ -1,8 +1,25 @@
 import Foundation
+import CoreLocation
 @testable import NotchFlow
 import XCTest
 
 final class WeatherBatteryRegressionTests: XCTestCase {
+    @MainActor
+    func testWeatherSyncUsesCurrentSystemAuthorizationAndRequestsLocation() {
+        let settings = AppSettings()
+        settings.weatherEnabled = true
+        let locationManager = FakeWeatherLocationManager(authorizationStatus: .notDetermined)
+        let service = WeatherForecastService(settings: settings, locationManager: locationManager)
+
+        XCTAssertEqual(service.authorizationStatus, .notDetermined)
+
+        locationManager.authorizationStatus = .authorizedAlways
+        service.synchronizeAuthorizationStatus(refreshIfAuthorized: true)
+
+        XCTAssertEqual(service.authorizationStatus, .authorizedAlways)
+        XCTAssertEqual(locationManager.requestLocationCallCount, 1)
+    }
+
     func testWeatherEntitlementStaysEnabled() throws {
         let entitlementURL = packageRoot()
             .appendingPathComponent("App")
@@ -108,10 +125,87 @@ final class WeatherBatteryRegressionTests: XCTestCase {
         )
     }
 
+    func testWeatherLocationNameFormatterPrefersDistrictAndCity() {
+        XCTAssertEqual(
+            WeatherLocationNameFormatter.displayName(
+                subLocality: "南山区",
+                locality: "深圳市",
+                administrativeArea: "广东省",
+                country: "中国"
+            ),
+            "南山区 · 深圳市"
+        )
+        XCTAssertEqual(
+            WeatherLocationNameFormatter.displayName(
+                subLocality: nil,
+                locality: "上海市",
+                administrativeArea: "上海市",
+                country: "中国"
+            ),
+            "上海市"
+        )
+        XCTAssertEqual(
+            WeatherLocationNameFormatter.displayName(
+                subLocality: nil,
+                locality: nil,
+                administrativeArea: nil,
+                country: nil
+            ),
+            "当前位置"
+        )
+    }
+
+    func testWeatherPanelPresentationShowsResolvedLocationWithCondition() {
+        let weather = WeatherSnapshot(
+            symbolName: "cloud.fill",
+            conditionName: "阴天",
+            temperature: Measurement(value: 25, unit: UnitTemperature.celsius),
+            apparentTemperature: nil,
+            highTemperature: nil,
+            lowTemperature: nil,
+            humidity: nil,
+            windSpeed: nil,
+            uvIndex: nil,
+            hourlyForecast: [],
+            locationName: "南山区 · 深圳市"
+        )
+
+        XCTAssertEqual(
+            WeatherPanelPresentation.locationConditionText(for: weather),
+            "南山区 · 深圳市 · 阴天"
+        )
+        XCTAssertEqual(
+            WeatherPanelPresentation.locationConditionText(for: .empty),
+            ""
+        )
+    }
+
     private func packageRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+@MainActor
+private final class FakeWeatherLocationManager: WeatherLocationManaging {
+    var authorizationStatus: CLAuthorizationStatus
+    var locationServicesEnabled = true
+    weak var delegate: CLLocationManagerDelegate?
+    var desiredAccuracy: CLLocationAccuracy = kCLLocationAccuracyThreeKilometers
+    private(set) var requestAuthorizationCallCount = 0
+    private(set) var requestLocationCallCount = 0
+
+    init(authorizationStatus: CLAuthorizationStatus) {
+        self.authorizationStatus = authorizationStatus
+    }
+
+    func requestWhenInUseAuthorization() {
+        requestAuthorizationCallCount += 1
+    }
+
+    func requestLocation() {
+        requestLocationCallCount += 1
     }
 }

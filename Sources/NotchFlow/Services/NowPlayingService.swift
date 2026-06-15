@@ -4,15 +4,47 @@ import CoreLocation
 import Foundation
 import WeatherKit
 
+protocol NowPlayingRemoteFetching: Sendable {
+    @MainActor
+    func fetchNowPlaying() async -> MediaRemotePayload?
+}
+
+protocol NowPlayingMusicFetching: Sendable {
+    func fetchNowPlaying() -> MusicAppPayload?
+}
+
+struct MediaRemoteNowPlayingFetcher: NowPlayingRemoteFetching {
+    func fetchNowPlaying() async -> MediaRemotePayload? {
+        await MediaRemoteBridge.shared.fetchNowPlaying()
+    }
+}
+
+struct MusicAppleScriptNowPlayingFetcher: NowPlayingMusicFetching {
+    func fetchNowPlaying() -> MusicAppPayload? {
+        MusicAppleScriptBridge.fetchNowPlaying()
+    }
+}
+
 @MainActor
 final class NowPlayingService: ObservableObject {
     @Published private(set) var snapshot = NowPlayingSnapshot.empty
     @Published private(set) var sourceLabel = "Idle"
+    @Published private(set) var isRefreshing = false
 
+    private let remoteFetcher: any NowPlayingRemoteFetching
+    private let musicFetcher: any NowPlayingMusicFetching
     private var timer: Timer?
     private var refreshTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var pollingInterval: TimeInterval = 2.0
+
+    init(
+        remoteFetcher: any NowPlayingRemoteFetching = MediaRemoteNowPlayingFetcher(),
+        musicFetcher: any NowPlayingMusicFetching = MusicAppleScriptNowPlayingFetcher()
+    ) {
+        self.remoteFetcher = remoteFetcher
+        self.musicFetcher = musicFetcher
+    }
 
     func start() {
         installObservers()
@@ -44,13 +76,14 @@ final class NowPlayingService: ObservableObject {
 
     func refresh() {
         refreshTask?.cancel()
+        isRefreshing = true
 
         refreshTask = Task { [weak self] in
             guard let self else {
                 return
             }
 
-            if let remotePayload = await MediaRemoteBridge.shared.fetchNowPlaying() {
+            if let remotePayload = await remoteFetcher.fetchNowPlaying() {
                 snapshot = NowPlayingSnapshot(
                     title: remotePayload.title,
                     artist: remotePayload.artist,
@@ -60,10 +93,19 @@ final class NowPlayingService: ObservableObject {
                     artworkData: remotePayload.artworkData
                 )
                 sourceLabel = "System"
+                isRefreshing = false
                 return
             }
 
-            if let musicPayload = MusicAppleScriptBridge.fetchNowPlaying() {
+            let musicPayload = await Task.detached(priority: .utility) { [musicFetcher] in
+                musicFetcher.fetchNowPlaying()
+            }.value
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            if let musicPayload {
                 snapshot = NowPlayingSnapshot(
                     title: musicPayload.title,
                     artist: musicPayload.artist,
@@ -73,11 +115,13 @@ final class NowPlayingService: ObservableObject {
                     artworkData: nil
                 )
                 sourceLabel = "Music"
+                isRefreshing = false
                 return
             }
 
             snapshot = .empty
             sourceLabel = "Idle"
+            isRefreshing = false
         }
     }
 
@@ -157,15 +201,60 @@ final class NowPlayingService: ObservableObject {
 }
 
 @MainActor
+protocol WeatherLocationManaging: AnyObject {
+    var authorizationStatus: CLAuthorizationStatus { get }
+    var locationServicesEnabled: Bool { get }
+    var delegate: CLLocationManagerDelegate? { get set }
+    var desiredAccuracy: CLLocationAccuracy { get set }
+
+    func requestWhenInUseAuthorization()
+    func requestLocation()
+}
+
+extension CLLocationManager: WeatherLocationManaging {
+    var locationServicesEnabled: Bool {
+        Self.locationServicesEnabled()
+    }
+}
+
+protocol WeatherLocationNameResolving: Sendable {
+    func locationName(for location: CLLocation) async -> String?
+}
+
+struct WeatherLocationNameResolver: WeatherLocationNameResolving {
+    func locationName(for location: CLLocation) async -> String? {
+        let geocoder = CLGeocoder()
+
+        do {
+            let placemarks = try await geocoder.reverseGeocodeLocation(location)
+            guard let placemark = placemarks.first else {
+                return nil
+            }
+
+            return WeatherLocationNameFormatter.displayName(
+                subLocality: placemark.subLocality,
+                locality: placemark.locality,
+                administrativeArea: placemark.administrativeArea,
+                country: placemark.country
+            )
+        } catch {
+            return nil
+        }
+    }
+}
+
+@MainActor
 final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency CLLocationManagerDelegate {
     @Published private(set) var snapshot = WeatherSnapshot.empty
     @Published private(set) var attribution = WeatherAttributionSnapshot.empty
     @Published private(set) var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var locationServicesEnabled = true
     @Published private(set) var isLoading = false
     @Published private(set) var statusMessage = "等待获取天气"
 
     private let settings: AppSettings
-    private let locationManager = CLLocationManager()
+    private let locationManager: any WeatherLocationManaging
+    private let locationNameResolver: any WeatherLocationNameResolving
     private let weatherService = WeatherKit.WeatherService.shared
     private let fallbackWeatherClient = OpenMeteoWeatherClient()
     private let refreshInterval: TimeInterval = 30 * 60
@@ -175,8 +264,14 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
     private var cancellables: Set<AnyCancellable> = []
     private var lastRefreshDate: Date?
 
-    init(settings: AppSettings) {
+    init(
+        settings: AppSettings,
+        locationManager: any WeatherLocationManaging = CLLocationManager(),
+        locationNameResolver: any WeatherLocationNameResolving = WeatherLocationNameResolver()
+    ) {
         self.settings = settings
+        self.locationManager = locationManager
+        self.locationNameResolver = locationNameResolver
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
@@ -187,8 +282,9 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
             return
         }
 
-        authorizationStatus = locationManager.authorizationStatus
+        updateLocationAuthorizationState()
         bindSettings()
+        observeApplicationActivation()
         scheduleRefreshTimer()
 
         if settings.weatherEnabled {
@@ -206,24 +302,85 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
         cancellables.removeAll()
     }
 
+    @discardableResult
+    func synchronizeAuthorizationStatus(refreshIfAuthorized: Bool = false) -> CLAuthorizationStatus {
+        let status = updateLocationAuthorizationState()
+
+        guard settings.weatherEnabled else {
+            clearWeather()
+            statusMessage = "天气已关闭"
+            return status
+        }
+
+        guard locationServicesEnabled else {
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "定位服务不可用"
+            return status
+        }
+
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            if refreshIfAuthorized {
+                refresh(force: true)
+            } else if !snapshot.hasContent && !isLoading {
+                statusMessage = "可以获取天气"
+            }
+        case .notDetermined:
+            if !isLoading {
+                statusMessage = "等待定位权限"
+            }
+        case .restricted:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "定位权限受限"
+        case .denied:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "请在系统设置中允许定位"
+        @unknown default:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "无法访问天气"
+        }
+
+        return status
+    }
+
     func requestLocationAuthorization() {
         guard settings.weatherEnabled else {
+            statusMessage = "天气已关闭"
             return
         }
 
-        guard CLLocationManager.locationServicesEnabled() else {
+        let status = updateLocationAuthorizationState()
+
+        guard locationServicesEnabled else {
             snapshot = .empty
+            isLoading = false
             statusMessage = "定位服务不可用"
             return
         }
 
-        let status = locationManager.authorizationStatus
-        authorizationStatus = status
-
-        if status == .notDetermined {
+        switch status {
+        case .notDetermined:
             isLoading = true
             statusMessage = "请求定位权限..."
             locationManager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            requestLocation()
+        case .restricted:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "定位权限受限"
+        case .denied:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "请在系统设置中允许定位"
+        @unknown default:
+            snapshot = .empty
+            isLoading = false
+            statusMessage = "无法访问天气"
         }
     }
 
@@ -234,7 +391,9 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
             return
         }
 
-        guard CLLocationManager.locationServicesEnabled() else {
+        let status = updateLocationAuthorizationState()
+
+        guard locationServicesEnabled else {
             snapshot = .empty
             isLoading = false
             statusMessage = "定位服务不可用"
@@ -247,9 +406,6 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
            Date().timeIntervalSince(lastRefreshDate) < refreshInterval / 2 {
             return
         }
-
-        let status = locationManager.authorizationStatus
-        authorizationStatus = status
 
         switch status {
         case .authorizedAlways, .authorizedWhenInUse:
@@ -276,6 +432,11 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
             return
         }
 
+        let status = synchronizeAuthorizationStatus()
+        guard Self.isAuthorized(status), locationServicesEnabled else {
+            return
+        }
+
         guard !snapshot.hasContent || lastRefreshDate == nil || Date().timeIntervalSince(lastRefreshDate!) >= maximumAge else {
             return
         }
@@ -285,6 +446,7 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
+        locationServicesEnabled = locationManager.locationServicesEnabled
 
         switch manager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
@@ -338,7 +500,7 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
                 }
 
                 if isEnabled {
-                    self.statusMessage = "准备获取天气"
+                    self.synchronizeAuthorizationStatus()
                     self.refresh(force: true)
                 } else {
                     self.clearWeather()
@@ -346,6 +508,39 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func observeApplicationActivation() {
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        return
+                    }
+
+                    let status = self.synchronizeAuthorizationStatus()
+                    if Self.isAuthorized(status) {
+                        self.refreshIfNeeded(maximumAge: 60)
+                    }
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    @discardableResult
+    private func updateLocationAuthorizationState() -> CLAuthorizationStatus {
+        locationServicesEnabled = locationManager.locationServicesEnabled
+        authorizationStatus = locationManager.authorizationStatus
+        return authorizationStatus
+    }
+
+    private static func isAuthorized(_ status: CLAuthorizationStatus) -> Bool {
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            return true
+        default:
+            return false
+        }
     }
 
     private func requestLocation() {
@@ -358,10 +553,14 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
         fetchTask?.cancel()
         attributionTask?.cancel()
 
-        fetchTask = Task { [weak self] in
+        let locationNameResolver = locationNameResolver
+
+        fetchTask = Task { [weak self, locationNameResolver] in
             guard let self else {
                 return
             }
+
+            let locationName = await locationNameResolver.locationName(for: location)
 
             do {
                 let weather = try await weatherService.weather(for: location)
@@ -369,7 +568,7 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
                     return
                 }
 
-                snapshot = WeatherSnapshot(weather: weather)
+                snapshot = WeatherSnapshot(weather: weather).withLocationName(locationName)
                 lastRefreshDate = Date()
                 isLoading = false
                 statusMessage = "由 Apple Weather 提供"
@@ -387,7 +586,7 @@ final class WeatherForecastService: NSObject, ObservableObject, @preconcurrency 
                         return
                     }
 
-                    snapshot = fallbackSnapshot
+                    snapshot = fallbackSnapshot.withLocationName(locationName)
                     attribution = OpenMeteoWeatherClient.attribution
                     lastRefreshDate = Date()
                     isLoading = false
