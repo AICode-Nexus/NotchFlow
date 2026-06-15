@@ -35,11 +35,19 @@ final class ChargeLimitService: ObservableObject {
     @Published private(set) var isHelperInstalled: Bool = false
 
     private let settings: AppSettings
+    private let helperExecutablePath: String
+    private let helperCommandRunner: ((String) -> String)?
     private var notifyToken: Int32 = 0
     private var isRegistered = false
 
-    init(settings: AppSettings) {
+    init(
+        settings: AppSettings,
+        installedHelperPath: String = "/usr/local/bin/notchflow-smc-helper",
+        helperCommandRunner: ((String) -> String)? = nil
+    ) {
         self.settings = settings
+        self.helperExecutablePath = installedHelperPath
+        self.helperCommandRunner = helperCommandRunner
         self.isHelperInstalled = helperInstalled()
     }
 
@@ -48,7 +56,7 @@ final class ChargeLimitService: ObservableObject {
 
         guard settings.chargeLimitEnabled else {
             unregisterPercentNotification()
-            state = .idle
+            restoreChargingIfNeeded()
             return
         }
 
@@ -58,7 +66,12 @@ final class ChargeLimitService: ObservableObject {
             return
         }
 
-        guard helperSupportsChargeControl() else {
+        guard let status = helperStatus() else {
+            unregisterPercentNotification()
+            return
+        }
+
+        guard status.supported else {
             unregisterPercentNotification()
             settings.chargeLimitEnabled = false
             state = .unsupported
@@ -70,10 +83,7 @@ final class ChargeLimitService: ObservableObject {
 
     func stop() {
         unregisterPercentNotification()
-        if state == .chargingDisabled {
-            restoreCharging()
-        }
-        state = .idle
+        restoreChargingIfNeeded()
     }
 
     func toggle() {
@@ -82,20 +92,6 @@ final class ChargeLimitService: ObservableObject {
 
     func setEnabled(_ enabled: Bool) {
         if enabled {
-            isHelperInstalled = helperInstalled()
-
-            guard isHelperInstalled else {
-                settings.chargeLimitEnabled = false
-                state = helperSourcePath() == nil ? .error("未找到 Helper 可执行文件") : .helperNotInstalled
-                return
-            }
-
-            guard helperSupportsChargeControl() else {
-                settings.chargeLimitEnabled = false
-                state = .unsupported
-                return
-            }
-
             settings.chargeLimitEnabled = true
             start()
             return
@@ -128,11 +124,7 @@ final class ChargeLimitService: ObservableObject {
 
         isHelperInstalled = helperInstalled()
         if isHelperInstalled {
-            if settings.chargeLimitEnabled {
-                start()
-            } else {
-                state = .idle
-            }
+            start()
         } else if output.hasPrefix("error:") {
             state = .error("安装 Helper 失败")
         }
@@ -180,17 +172,36 @@ final class ChargeLimitService: ObservableObject {
         guard (packedBits & validBit) != 0 else { return }
 
         let percent = Int(min(packedBits & 0xFF, 100))
-        currentPercent = percent
+        reconcile(percent: percent)
+    }
+
+    func reconcile(percent: Int) {
+        currentPercent = min(max(percent, 0), 100)
+
+        guard settings.chargeLimitEnabled else {
+            restoreChargingIfNeeded()
+            return
+        }
+
+        guard let status = helperStatus() else {
+            return
+        }
+
+        guard status.supported else {
+            settings.chargeLimitEnabled = false
+            state = .unsupported
+            return
+        }
 
         let maxCharge = settings.chargeLimitMax
         let minCharge = settings.chargeLimitMin
 
-        if percent >= maxCharge && state != .chargingDisabled {
+        if currentPercent >= maxCharge && !status.chargingDisabled {
             disableCharging()
-        } else if percent < minCharge && state == .chargingDisabled {
+        } else if currentPercent < minCharge && status.chargingDisabled {
             enableCharging()
-        } else if state != .chargingDisabled {
-            state = .monitoring
+        } else {
+            state = status.chargingDisabled ? .chargingDisabled : .monitoring
         }
     }
 
@@ -212,21 +223,47 @@ final class ChargeLimitService: ObservableObject {
         }
     }
 
-    private func restoreCharging() {
-        _ = runHelperCommand("enable-charging")
+    private func restoreChargingIfNeeded() {
+        guard isHelperInstalled else {
+            state = .idle
+            return
+        }
+
+        guard let status = helperStatus() else {
+            return
+        }
+
+        guard status.supported, status.chargingDisabled else {
+            state = .idle
+            return
+        }
+
+        let output = runHelperCommand("enable-charging")
+        state = output.hasPrefix("error:") ? .error("恢复充电失败") : .idle
     }
 
-    private func helperSupportsChargeControl() -> Bool {
+    private func helperStatus() -> HelperStatus? {
         let output = runHelperCommand("status")
         if output.hasPrefix("error:") {
             state = .error("无法检测设备支持状态")
-            return false
+            return nil
         }
 
-        return output.contains(#""supported":true"#)
+        guard let data = output.data(using: .utf8),
+              let status = try? JSONDecoder().decode(HelperStatus.self, from: data)
+        else {
+            state = .error("Helper 状态格式无效")
+            return nil
+        }
+
+        return status
     }
 
     private func runHelperCommand(_ command: String) -> String {
+        if let helperCommandRunner {
+            return helperCommandRunner(command)
+        }
+
         let path = installedHelperPath()
         guard FileManager.default.isExecutableFile(atPath: path) else {
             return "error: helper not installed"
@@ -271,7 +308,7 @@ final class ChargeLimitService: ObservableObject {
     }
 
     private func installedHelperPath() -> String {
-        "/usr/local/bin/notchflow-smc-helper"
+        helperExecutablePath
     }
 
     private func helperSourcePath() -> String? {
@@ -308,4 +345,9 @@ final class ChargeLimitService: ObservableObject {
     private func shellEscaped(_ path: String) -> String {
         path.replacingOccurrences(of: "'", with: "'\"'\"'")
     }
+}
+
+private struct HelperStatus: Decodable {
+    let supported: Bool
+    let chargingDisabled: Bool
 }
