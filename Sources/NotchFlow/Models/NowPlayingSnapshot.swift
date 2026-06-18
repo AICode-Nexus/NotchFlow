@@ -10,8 +10,13 @@ struct NowPlayingSnapshot: Equatable {
     let isPlaying: Bool
     let artworkData: Data?
 
+    var displayTitle: String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? nil : trimmedTitle
+    }
+
     var hasContent: Bool {
-        !title.isEmpty
+        displayTitle != nil
     }
 
     var shouldDisplay: Bool {

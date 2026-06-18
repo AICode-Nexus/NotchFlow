@@ -2,6 +2,16 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @ObservedObject var model: NotchFlowAppModel
+    @ObservedObject private var nowPlaying: NowPlayingService
+    @ObservedObject private var panelController: NotchPanelController
+    @ObservedObject private var wallpaper: WallpaperRefreshService
+
+    init(model: NotchFlowAppModel) {
+        _model = ObservedObject(wrappedValue: model)
+        _nowPlaying = ObservedObject(wrappedValue: model.nowPlaying)
+        _panelController = ObservedObject(wrappedValue: model.panelController)
+        _wallpaper = ObservedObject(wrappedValue: model.wallpaper)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -9,10 +19,12 @@ struct MenuBarContentView: View {
                 Text("NotchFlow")
                     .font(.headline)
 
-                Text(model.nowPlaying.snapshot.title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if let displayTitle = nowPlaying.snapshot.displayTitle {
+                    Text(displayTitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Divider()
@@ -21,8 +33,8 @@ struct MenuBarContentView: View {
                 model.togglePanelPinState()
             } label: {
                 Label(
-                    model.panelController.isPinned ? "收起面板" : "展开面板",
-                    systemImage: model.panelController.isPinned ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left"
+                    panelController.isPinned ? "收起面板" : "展开面板",
+                    systemImage: panelController.isPinned ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left"
                 )
             }
 
@@ -37,7 +49,7 @@ struct MenuBarContentView: View {
             } label: {
                 Label("刷新壁纸", systemImage: "photo.on.rectangle.angled")
             }
-            .disabled(model.wallpaper.isRefreshing)
+            .disabled(wallpaper.isRefreshing)
 
             SettingsLink {
                 Label("设置", systemImage: "gearshape")
