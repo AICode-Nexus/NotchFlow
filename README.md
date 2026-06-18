@@ -35,14 +35,14 @@ NotchFlow 是一款原生 macOS 刘海工具。它以菜单栏应用运行，不
 
 ## 安装
 
-1. 从最新 GitHub 发布页下载 `NotchFlow-v0.1.0-macOS.zip`。
+1. 从最新 GitHub 发布页下载 `NotchFlow-v0.1.1-macOS.zip`。
 2. 解压后把 `NotchFlow.app` 移动到 `/Applications`。
 3. 如果 macOS 首次启动时提示应用暂未公证，请右键应用并选择 **打开**。
 4. 只为你启用的功能授予权限，例如定位、自动化或登录时启动。
 
 ## 当前版本说明
 
-`v0.1.0` 是第一个公开开发者预览版。它用于分发流程验证，当前为本地签名，还未使用 Apple Developer ID 公证。
+`v0.1.1` 是当前公开开发者预览版。它用于分发流程验证，当前为本地签名，还未使用 Apple Developer ID 公证。
 
 已知限制：
 

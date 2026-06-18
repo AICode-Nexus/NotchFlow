@@ -4,9 +4,9 @@ This document tracks the release flow for NotchFlow maintainers.
 
 ## Current Release
 
-- Version: `v0.1.0`
-- Date: 2026-06-15
-- Status: First public developer preview
+- Version: `v0.1.1`
+- Date: 2026-06-18
+- Status: Patch release for the menu bar preview
 - Distribution: GitHub Release `.zip`
 - Signing: local signing only, not notarized
 - Website: https://aicode-nexus.github.io/NotchFlow/
@@ -31,10 +31,10 @@ This document tracks the release flow for NotchFlow maintainers.
 swift scripts/generate_release_assets.swift
 swift test
 xcodebuild -project NotchFlow.xcodeproj -scheme NotchFlow -configuration Release -derivedDataPath .build/xcode-derived build
-ditto -c -k --keepParent .build/xcode-derived/Build/Products/Release/NotchFlow.app dist/NotchFlow-v0.1.0-macOS.zip
-gh release create v0.1.0 dist/NotchFlow-v0.1.0-macOS.zip --title "NotchFlow v0.1.0" --notes-file RELEASE_NOTES.md
+ditto -c -k --keepParent .build/xcode-derived/Build/Products/Release/NotchFlow.app dist/NotchFlow-v0.1.1-macOS.zip
+gh release create v0.1.1 dist/NotchFlow-v0.1.1-macOS.zip --title "NotchFlow v0.1.1" --notes-file RELEASE_NOTES.md
 ```
 
 ## Notarization Gap
 
-`v0.1.0` is intentionally published as a developer preview without Developer ID notarization. A future production-quality release should add Developer ID signing, notarization, a DMG or PKG installer, and automated release builds.
+`v0.1.1` is intentionally published as a developer preview without Developer ID notarization. A future production-quality release should add Developer ID signing, notarization, a DMG or PKG installer, and automated release builds.
