@@ -1,16 +1,16 @@
-# NotchFlow v0.1.1
+# NotchFlow v0.1.2
 
-NotchFlow v0.1.1 is a patch release for the native macOS notch utility.
+NotchFlow v0.1.2 is a patch release for the native macOS notch utility.
 
 ## Highlights
 
-- The menu bar dropdown no longer reserves a large blank area when there is no Now Playing title.
-- Now Playing titles are trimmed before display, and empty or whitespace-only titles are treated as no content.
-- The menu bar dropdown now observes nested media, panel, and wallpaper refresh state directly so labels and disabled states stay current.
+- The Screen Health card now has a more relaxed score row with the status or rest reminder presented as an inline badge.
+- Activity and continuous-focus durations are displayed as compact single-line labels.
+- Layout regression coverage now checks breathing room across text sizes and rest-reminder states.
 
 ## Install
 
-Download `NotchFlow-v0.1.1-macOS.zip`, unzip it, and move `NotchFlow.app` to `/Applications`.
+Download `NotchFlow-v0.1.2-macOS.zip`, unzip it, and move `NotchFlow.app` to `/Applications`.
 
 This preview is locally signed but not notarized. On first launch, macOS may require right-clicking the app and choosing **Open**.
 

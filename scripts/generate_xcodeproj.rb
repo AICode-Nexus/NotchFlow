@@ -108,8 +108,8 @@ target.build_configurations.each do |config|
   settings['ENABLE_APP_SANDBOX'] = 'NO'
   settings['GENERATE_INFOPLIST_FILE'] = 'NO'
   settings['LD_RUNPATH_SEARCH_PATHS'] = '$(inherited) @executable_path/../Frameworks'
-  settings['MARKETING_VERSION'] = '0.1.0'
-  settings['CURRENT_PROJECT_VERSION'] = '1'
+  settings['MARKETING_VERSION'] = '0.1.2'
+  settings['CURRENT_PROJECT_VERSION'] = '3'
   settings['SWIFT_EMIT_LOC_STRINGS'] = 'NO'
 end
 

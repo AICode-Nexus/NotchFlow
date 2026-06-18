@@ -2,6 +2,14 @@
 
 NotchFlow 的重要变更会记录在这里。
 
+## [0.1.2] - 2026-06-18
+
+### 修复
+
+- 屏幕健康卡片改为更舒展的分数行布局，低分或休息提醒不再挤在底部红字区域。
+- 活跃时长和连续时长改为单行紧凑标签，减少两行文本造成的拥挤感。
+- 增加屏幕健康展开卡片布局回归测试，覆盖不同字号和休息提醒状态。
+
 ## [0.1.1] - 2026-06-18
 
 ### 修复
@@ -38,5 +46,6 @@ NotchFlow 的重要变更会记录在这里。
 - 天气、自动化和登录启动行为依赖 macOS 权限。
 - 充电限制仍为实验功能，SMC 行为会因硬件不同而变化。
 
+[0.1.2]: https://github.com/AICode-Nexus/NotchFlow/releases/tag/v0.1.2
 [0.1.1]: https://github.com/AICode-Nexus/NotchFlow/releases/tag/v0.1.1
 [0.1.0]: https://github.com/AICode-Nexus/NotchFlow/releases/tag/v0.1.0

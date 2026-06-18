@@ -87,11 +87,12 @@ struct ScreenHealthPanelLayout {
         headerHeight
             + scoreTopSpacing
             + scoreRowHeight
-            + statusRowHeight
             + metricTopSpacing
             + metricTileHeight
-            + reminderTopSpacing
-            + reminderRowHeight
+    }
+
+    var remainingContentHeight: CGFloat {
+        availableContentHeight - requiredContentHeight
     }
 
     var cardVerticalInset: CGFloat {
@@ -103,35 +104,35 @@ struct ScreenHealthPanelLayout {
     }
 
     var scoreTopSpacing: CGFloat {
-        metrics.scaled(showsRestReminder ? 1 : 5, minimum: showsRestReminder ? 1 : 5)
+        metrics.scaled(6, minimum: 6)
     }
 
     var scoreRowHeight: CGFloat {
-        metrics.scaled(showsRestReminder ? 25 : 31, minimum: showsRestReminder ? 25 : 31)
+        metrics.scaled(34, minimum: 34)
     }
 
     var statusRowHeight: CGFloat {
-        metrics.scaled(14, minimum: 14)
+        0
     }
 
     var metricTopSpacing: CGFloat {
-        metrics.scaled(showsRestReminder ? 1 : 5, minimum: showsRestReminder ? 1 : 5)
+        metrics.scaled(8, minimum: 8)
     }
 
     var metricTileHeight: CGFloat {
-        metrics.scaled(25, minimum: 25)
+        metrics.scaled(22, minimum: 22)
     }
 
     var reminderTopSpacing: CGFloat {
-        showsRestReminder ? metrics.scaled(1, minimum: 1) : 0
+        0
     }
 
     var reminderRowHeight: CGFloat {
-        showsRestReminder ? metrics.scaled(13, minimum: 13) : 0
+        0
     }
 
     var scoreFontSize: CGFloat {
-        showsRestReminder ? 22 : 26
+        28
     }
 }
 
@@ -1228,26 +1229,26 @@ struct NotchPanelView: View {
             Spacer(minLength: 0)
                 .frame(height: layout.scoreTopSpacing)
 
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(screenHealth.snapshot.healthScore)")
-                    .font(panelFont(layout.scoreFontSize, weight: .bold, minimum: 20))
-                    .foregroundStyle(screenHealthAccentColor)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(screenHealth.snapshot.healthScore)")
+                        .font(panelFont(layout.scoreFontSize, weight: .bold, minimum: 20))
+                        .foregroundStyle(screenHealthAccentColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
 
-                Text("分")
-                    .font(panelFont(11, weight: .semibold, minimum: 10))
-                    .foregroundStyle(moduleSecondaryTextColor)
-                    .lineLimit(1)
+                    Text("分")
+                        .font(panelFont(11, weight: .semibold, minimum: 10))
+                        .foregroundStyle(moduleSecondaryTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                screenHealthStatusBadge
             }
             .frame(height: layout.scoreRowHeight, alignment: .leading)
-
-            Text(screenHealth.snapshot.status.title)
-                .font(panelFont(11, weight: .semibold, minimum: 10))
-                .foregroundStyle(moduleSecondaryTextColor)
-                .lineLimit(1)
-                .frame(height: layout.statusRowHeight, alignment: .leading)
 
             Spacer(minLength: 0)
                 .frame(height: layout.metricTopSpacing)
@@ -1255,42 +1256,59 @@ struct NotchPanelView: View {
             HStack(spacing: 6) {
                 screenHealthMetricTile(
                     title: "今日",
-                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.todayActiveSeconds),
+                    value: ScreenHealthFormatter.compactDuration(screenHealth.snapshot.todayActiveSeconds),
                     height: layout.metricTileHeight
                 )
                 screenHealthMetricTile(
                     title: "连续",
-                    value: ScreenHealthFormatter.duration(screenHealth.snapshot.continuousActiveSeconds),
+                    value: ScreenHealthFormatter.compactDuration(screenHealth.snapshot.continuousActiveSeconds),
                     height: layout.metricTileHeight
                 )
             }
             .frame(height: layout.metricTileHeight)
+        }
+    }
 
-            if screenHealth.snapshot.shouldShowRestReminder {
-                Spacer(minLength: 0)
-                    .frame(height: layout.reminderTopSpacing)
+    private var screenHealthStatusBadge: some View {
+        Text(screenHealthStatusBadgeText)
+            .font(panelFont(10, weight: .semibold, minimum: 10))
+            .foregroundStyle(screenHealthAccentColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            .background(
+                screenHealthAccentColor.opacity(0.14),
+                in: Capsule(style: .continuous)
+            )
+    }
 
-                Text("看远处，活动一下")
-                    .font(panelFont(10, weight: .medium, minimum: 10))
-                    .foregroundStyle(screenHealthAccentColor)
-                    .lineLimit(1)
-                    .frame(height: layout.reminderRowHeight, alignment: .leading)
-            }
+    private var screenHealthStatusBadgeText: String {
+        switch screenHealth.snapshot.status {
+        case .normal:
+            return "良好"
+        case .nearingBreak:
+            return "快休息"
+        case .breakDue:
+            return "休息一下"
+        case .resting:
+            return "休息中"
         }
     }
 
     private func screenHealthMetricTile(title: String, value: String, height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(title)
                 .font(panelFont(10, weight: .medium, minimum: 10))
                 .foregroundStyle(moduleTertiaryTextColor)
                 .lineLimit(1)
 
             Text(value)
-                .font(panelFont(10, weight: .semibold, minimum: 10))
+                .font(panelFont(11, weight: .semibold, minimum: 10))
                 .foregroundStyle(moduleSecondaryTextColor)
+                .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.7)
         }
         .padding(.horizontal, 6)
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .leading)

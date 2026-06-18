@@ -64,6 +64,22 @@ enum ScreenHealthFormatter {
         return "\(minutes) 分钟"
     }
 
+    static func compactDuration(_ seconds: TimeInterval) -> String {
+        let totalMinutes = max(0, Int(seconds / 60))
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+
+        if hours > 0, minutes > 0 {
+            return "\(hours)时\(minutes)分"
+        }
+
+        if hours > 0 {
+            return "\(hours)小时"
+        }
+
+        return "\(minutes)分"
+    }
+
     static func score(_ value: Int) -> String {
         "\(value) 分"
     }

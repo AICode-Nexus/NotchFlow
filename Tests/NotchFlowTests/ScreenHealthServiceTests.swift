@@ -153,10 +153,34 @@ final class ScreenHealthPresentationTests: XCTestCase {
         }
     }
 
+    func testExpandedCardKeepsBreathingRoomAcrossStates() {
+        let textScales = PanelTextSizePreset.allCases.map { CGFloat($0.scale) }
+
+        for textScale in textScales {
+            for showsRestReminder in [false, true] {
+                let metrics = NotchPanelMetrics(textScale: textScale)
+                let layout = ScreenHealthPanelLayout(
+                    metrics: metrics,
+                    showsRestReminder: showsRestReminder
+                )
+
+                XCTAssertGreaterThanOrEqual(
+                    layout.remainingContentHeight,
+                    metrics.scaled(8, minimum: 8)
+                )
+                XCTAssertLessThanOrEqual(layout.metricTileHeight, metrics.scaled(22, minimum: 22))
+            }
+        }
+    }
+
     func testDurationFormatterUsesCompactChineseLabels() {
         XCTAssertEqual(ScreenHealthFormatter.duration(0), "0 分钟")
         XCTAssertEqual(ScreenHealthFormatter.duration(45 * 60), "45 分钟")
         XCTAssertEqual(ScreenHealthFormatter.duration(75 * 60), "1 小时 15 分钟")
+        XCTAssertEqual(ScreenHealthFormatter.compactDuration(0), "0分")
+        XCTAssertEqual(ScreenHealthFormatter.compactDuration(45 * 60), "45分")
+        XCTAssertEqual(ScreenHealthFormatter.compactDuration(60 * 60), "1小时")
+        XCTAssertEqual(ScreenHealthFormatter.compactDuration(75 * 60), "1时15分")
     }
 
     func testCompactPresentationOnlyShowsBreakDueReminder() {
