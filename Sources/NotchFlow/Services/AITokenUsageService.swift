@@ -280,14 +280,183 @@ enum AITokenUsageAggregator {
     }
 }
 
+private struct CodexUsageValues: Hashable, Sendable {
+    let inputTokens: Int
+    let cachedInputTokens: Int
+    let cacheWriteInputTokens: Int
+    let outputTokens: Int
+    let reasoningOutputTokens: Int
+    let totalTokens: Int
+
+    init(_ object: [String: Any]) {
+        inputTokens = intValue(object["input_tokens"])
+        cachedInputTokens = intValue(object["cached_input_tokens"])
+        cacheWriteInputTokens = intValue(object["cache_write_input_tokens"])
+        outputTokens = intValue(object["output_tokens"])
+        reasoningOutputTokens = intValue(object["reasoning_output_tokens"])
+        totalTokens = intValueIfPresent(object["total_tokens"]) ?? (inputTokens + outputTokens)
+    }
+
+    var stableDescription: String {
+        [
+            inputTokens,
+            cachedInputTokens,
+            cacheWriteInputTokens,
+            outputTokens,
+            reasoningOutputTokens,
+            totalTokens,
+        ]
+        .map(String.init)
+        .joined(separator: ",")
+    }
+}
+
+private struct CodexUsageFingerprint: Hashable, Sendable {
+    let lastUsage: CodexUsageValues
+    let cumulativeUsage: CodexUsageValues?
+    let cumulativeGeneration: Int
+    let fallbackTimestamp: String?
+
+    var stableDescription: String {
+        [
+            String(cumulativeGeneration),
+            lastUsage.stableDescription,
+            cumulativeUsage?.stableDescription ?? "none",
+            fallbackTimestamp ?? "",
+        ]
+        .joined(separator: "|")
+    }
+}
+
+private struct CodexRawUsageEvent: Sendable {
+    let timestamp: Date
+    let breakdown: AITokenBreakdown
+    let fingerprint: CodexUsageFingerprint
+}
+
+private struct CodexFileSnapshot {
+    let sessionID: String
+    var parentThreadID: String?
+    var byteOffset: UInt64 = 0
+    var trailingData = Data()
+    var events: [CodexRawUsageEvent] = []
+    var previousCumulativeTotal: Int?
+    var cumulativeGeneration = 0
+}
+
+private final class CodexTokenUsageFileCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var snapshots: [String: CodexFileSnapshot] = [:]
+
+    func snapshot(
+        for fileURL: URL,
+        sessionID: String,
+        fileManager: FileManager
+    ) -> CodexFileSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let fileSize = fileSize(of: fileURL, fileManager: fileManager) else {
+            return nil
+        }
+
+        var snapshot = snapshots[sessionID] ?? CodexFileSnapshot(sessionID: sessionID)
+        if fileSize < snapshot.byteOffset {
+            snapshot = CodexFileSnapshot(sessionID: sessionID)
+        }
+
+        guard fileSize > snapshot.byteOffset else {
+            return snapshot
+        }
+
+        guard let scanState = scanJSONLFile(
+            at: fileURL,
+            startingAt: snapshot.byteOffset,
+            carrying: snapshot.trailingData,
+            markers: [Self.tokenCountMarker, Self.sessionMetaMarker],
+            handleObject: { object in
+                Self.consume(object, into: &snapshot)
+            }
+        ) else {
+            return snapshots[sessionID]
+        }
+
+        snapshot.byteOffset = scanState.byteOffset
+        snapshot.trailingData = scanState.trailingData
+        snapshots[sessionID] = snapshot
+        return snapshot
+    }
+
+    private static func consume(_ object: [String: Any], into snapshot: inout CodexFileSnapshot) {
+        if stringValue(object["type"]) == "session_meta",
+           let payload = object["payload"] as? [String: Any],
+           normalizedThreadID(stringValue(payload["id"])) == snapshot.sessionID
+        {
+            snapshot.parentThreadID = parentThreadID(from: payload)
+            return
+        }
+
+        guard stringValue(object["type"]) == "event_msg",
+              let payload = object["payload"] as? [String: Any],
+              stringValue(payload["type"]) == "token_count",
+              let timestampString = stringValue(object["timestamp"]),
+              let timestamp = ISO8601DateFormatter.notchFlowDate(from: timestampString),
+              let info = payload["info"] as? [String: Any],
+              let lastUsageObject = info["last_token_usage"] as? [String: Any]
+        else {
+            return
+        }
+
+        let lastUsage = CodexUsageValues(lastUsageObject)
+        guard lastUsage.totalTokens > 0 else {
+            return
+        }
+
+        let cumulativeUsage = (info["total_token_usage"] as? [String: Any]).map(CodexUsageValues.init)
+        if let cumulativeTotal = cumulativeUsage?.totalTokens {
+            if let previous = snapshot.previousCumulativeTotal, cumulativeTotal < previous {
+                snapshot.cumulativeGeneration += 1
+            }
+            snapshot.previousCumulativeTotal = cumulativeTotal
+        }
+
+        let fingerprint = CodexUsageFingerprint(
+            lastUsage: lastUsage,
+            cumulativeUsage: cumulativeUsage,
+            cumulativeGeneration: snapshot.cumulativeGeneration,
+            fallbackTimestamp: cumulativeUsage == nil ? timestampString : nil
+        )
+        let breakdown = AITokenBreakdown(
+            inputTokens: lastUsage.inputTokens,
+            cachedInputTokens: lastUsage.cachedInputTokens,
+            cacheCreationInputTokens: lastUsage.cacheWriteInputTokens,
+            outputTokens: lastUsage.outputTokens,
+            reasoningOutputTokens: lastUsage.reasoningOutputTokens,
+            totalTokens: lastUsage.totalTokens
+        )
+        snapshot.events.append(
+            CodexRawUsageEvent(
+                timestamp: timestamp,
+                breakdown: breakdown,
+                fingerprint: fingerprint
+            )
+        )
+    }
+
+    private static let tokenCountMarker = Data("\"token_count\"".utf8)
+    private static let sessionMetaMarker = Data("\"session_meta\"".utf8)
+}
+
 struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendable {
     let sourceID: AITokenUsageSourceID = .codex
     let rootDirectories: [URL]
     private let fileManager: FileManager
+    private let cache: CodexTokenUsageFileCache
 
     init(rootDirectories: [URL] = Self.defaultRootDirectories(), fileManager: FileManager = .default) {
         self.rootDirectories = rootDirectories
         self.fileManager = fileManager
+        cache = CodexTokenUsageFileCache()
     }
 
     func read(since startDate: Date) -> AITokenUsageSourceReadResult {
@@ -296,9 +465,75 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendab
             return result(state: .missing, message: "未找到 Codex 会话目录", events: [])
         }
 
-        let parsedEvents = existingRoots
-            .flatMap { rolloutFiles(in: $0, since: startDate) }
-            .flatMap { tokenEvents(in: $0, since: startDate) }
+        let rolloutFileURLs = existingRoots.flatMap { self.rolloutFiles(in: $0) }
+        let fileBySessionID = preferredFilesBySessionID(rolloutFileURLs)
+        var requestedSessionIDs = Set(
+            fileBySessionID.compactMap { sessionID, fileURL in
+                shouldReadUsageFile(fileURL, since: startDate, fileManager: fileManager) ? sessionID : nil
+            }
+        )
+        var pendingSessionIDs = Array(requestedSessionIDs)
+        var snapshots: [String: CodexFileSnapshot] = [:]
+
+        while let sessionID = pendingSessionIDs.popLast() {
+            guard snapshots[sessionID] == nil,
+                  let fileURL = fileBySessionID[sessionID],
+                  let snapshot = cache.snapshot(
+                      for: fileURL,
+                      sessionID: sessionID,
+                      fileManager: fileManager
+                  )
+            else {
+                continue
+            }
+
+            snapshots[sessionID] = snapshot
+            if let parentThreadID = snapshot.parentThreadID,
+               fileBySessionID[parentThreadID] != nil,
+               snapshots[parentThreadID] == nil
+            {
+                pendingSessionIDs.append(parentThreadID)
+            }
+        }
+
+        // Parent sessions are loaded to identify replayed history. If one of them
+        // contains an in-window event, retain the original event and date too.
+        requestedSessionIDs.formUnion(snapshots.keys)
+        let fingerprintsBySession = snapshots.mapValues { snapshot in
+            Set(snapshot.events.map(\.fingerprint))
+        }
+        var parsedEvents: [AITokenUsageEvent] = []
+
+        for sessionID in requestedSessionIDs.sorted() {
+            guard let snapshot = snapshots[sessionID] else {
+                continue
+            }
+
+            var seenInSession: Set<CodexUsageFingerprint> = []
+            for event in snapshot.events {
+                guard seenInSession.insert(event.fingerprint).inserted,
+                      !isInherited(
+                          event.fingerprint,
+                          from: snapshot.parentThreadID,
+                          snapshots: snapshots,
+                          fingerprintsBySession: fingerprintsBySession
+                      ),
+                      event.timestamp >= startDate
+                else {
+                    continue
+                }
+
+                parsedEvents.append(
+                    AITokenUsageEvent(
+                        sourceID: sourceID,
+                        timestamp: event.timestamp,
+                        breakdown: event.breakdown,
+                        model: nil,
+                        stableID: "codex:\(sessionID):\(event.fingerprint.stableDescription)"
+                    )
+                )
+            }
+        }
 
         return result(
             state: parsedEvents.isEmpty ? .detected : .available,
@@ -319,10 +554,10 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendab
         )
     }
 
-    private func rolloutFiles(in root: URL, since startDate: Date) -> [URL] {
+    private func rolloutFiles(in root: URL) -> [URL] {
         guard let enumerator = fileManager.enumerator(
             at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
             return []
@@ -330,97 +565,43 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendab
 
         return enumerator
             .compactMap { $0 as? URL }
-            .filter { url in
-                guard url.lastPathComponent.hasPrefix("rollout-") && url.pathExtension == "jsonl" else {
-                    return false
-                }
-                if let modDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
-                   modDate < startDate {
-                    return false
-                }
+            .filter { $0.lastPathComponent.hasPrefix("rollout-") && $0.pathExtension == "jsonl" }
+    }
+
+    private func preferredFilesBySessionID(_ files: [URL]) -> [String: URL] {
+        var preferred: [String: URL] = [:]
+        for fileURL in files {
+            let sessionID = codexSessionID(from: fileURL)
+            guard let current = preferred[sessionID] else {
+                preferred[sessionID] = fileURL
+                continue
+            }
+
+            if (fileSize(of: fileURL, fileManager: fileManager) ?? 0)
+                > (fileSize(of: current, fileManager: fileManager) ?? 0)
+            {
+                preferred[sessionID] = fileURL
+            }
+        }
+        return preferred
+    }
+
+    private func isInherited(
+        _ fingerprint: CodexUsageFingerprint,
+        from parentThreadID: String?,
+        snapshots: [String: CodexFileSnapshot],
+        fingerprintsBySession: [String: Set<CodexUsageFingerprint>]
+    ) -> Bool {
+        var currentThreadID = parentThreadID
+        var visited: Set<String> = []
+
+        while let threadID = currentThreadID, visited.insert(threadID).inserted {
+            if fingerprintsBySession[threadID]?.contains(fingerprint) == true {
                 return true
             }
-    }
-
-    private func tokenEvents(in fileURL: URL, since startDate: Date) -> [AITokenUsageEvent] {
-        guard let content = tailContent(of: fileURL) else {
-            return []
+            currentThreadID = snapshots[threadID]?.parentThreadID
         }
-
-        return content
-            .split(whereSeparator: \.isNewline)
-            .compactMap { line in
-                codexEvent(from: String(line), fileURL: fileURL, since: startDate)
-            }
-    }
-
-    private static let maxReadBytes = 2 * 1024 * 1024
-
-    private func tailContent(of fileURL: URL) -> String? {
-        guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
-              let fileSize = attrs[.size] as? Int
-        else {
-            return try? String(contentsOf: fileURL, encoding: .utf8)
-        }
-
-        if fileSize <= Self.maxReadBytes {
-            return try? String(contentsOf: fileURL, encoding: .utf8)
-        }
-
-        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
-            return nil
-        }
-        defer { try? handle.close() }
-
-        let offset = UInt64(fileSize - Self.maxReadBytes)
-        try? handle.seek(toOffset: offset)
-        guard let data = try? handle.readToEnd() else {
-            return nil
-        }
-
-        guard var text = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        if let firstNewline = text.firstIndex(of: "\n") {
-            text = String(text[text.index(after: firstNewline)...])
-        }
-        return text
-    }
-
-    private func codexEvent(from line: String, fileURL: URL, since startDate: Date) -> AITokenUsageEvent? {
-        guard let object = jsonObject(from: line),
-              stringValue(object["type"]) == "event_msg",
-              let payload = object["payload"] as? [String: Any],
-              stringValue(payload["type"]) == "token_count",
-              let timestampString = stringValue(object["timestamp"]),
-              let timestamp = ISO8601DateFormatter.notchFlowDate(from: timestampString),
-              timestamp >= startDate,
-              let info = payload["info"] as? [String: Any],
-              let usage = info["last_token_usage"] as? [String: Any]
-        else {
-            return nil
-        }
-
-        let breakdown = AITokenBreakdown(
-            inputTokens: intValue(usage["input_tokens"]),
-            cachedInputTokens: intValue(usage["cached_input_tokens"]),
-            outputTokens: intValue(usage["output_tokens"]),
-            reasoningOutputTokens: intValue(usage["reasoning_output_tokens"]),
-            totalTokens: intValue(usage["total_tokens"])
-        )
-
-        guard breakdown.totalTokens > 0 else {
-            return nil
-        }
-
-        return AITokenUsageEvent(
-            sourceID: sourceID,
-            timestamp: timestamp,
-            breakdown: breakdown,
-            model: nil,
-            stableID: "\(fileURL.path):\(timestampString)"
-        )
+        return false
     }
 
     private func directoryExists(_ url: URL) -> Bool {
@@ -431,6 +612,7 @@ struct CodexTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Sendab
     static func defaultRootDirectories(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
         [
             homeDirectory.appendingPathComponent(".codex/sessions", isDirectory: true),
+            homeDirectory.appendingPathComponent(".codex/archived_sessions", isDirectory: true),
             homeDirectory.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true),
             homeDirectory.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true),
         ]
@@ -460,27 +642,48 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
             return result(state: .missing, message: "未找到 Claude 本地记录目录", events: [])
         }
 
-        var seenStableIDs: Set<String> = []
-        var parsedEvents: [AITokenUsageEvent] = []
+        var latestEventsByStableID: [String: AITokenUsageEvent] = [:]
+        var earliestTimestampsByStableID: [String: Date] = [:]
+
+        func merge(_ event: AITokenUsageEvent) {
+            earliestTimestampsByStableID[event.stableID] = min(
+                earliestTimestampsByStableID[event.stableID] ?? event.timestamp,
+                event.timestamp
+            )
+
+            guard let existing = latestEventsByStableID[event.stableID] else {
+                latestEventsByStableID[event.stableID] = event
+                return
+            }
+
+            let useIncomingUsage = event.timestamp > existing.timestamp
+                || (event.timestamp == existing.timestamp
+                    && event.breakdown.totalTokens >= existing.breakdown.totalTokens)
+            if useIncomingUsage {
+                latestEventsByStableID[event.stableID] = event
+            }
+        }
 
         for fileURL in existingProjectRoots.flatMap({ jsonlFiles(in: $0, since: startDate) }) {
-            parsedEvents.append(
-                contentsOf: tokenEvents(
-                    inProjectFile: fileURL,
-                    since: startDate,
-                    seenStableIDs: &seenStableIDs
-                )
-            )
+            for event in tokenEvents(inProjectFile: fileURL, since: startDate) {
+                merge(event)
+            }
         }
 
         for fileURL in existingCaptureRoots.flatMap({ captureFiles(in: $0, since: startDate) }) {
-            if let event = tokenEvent(
-                inCaptureFile: fileURL,
-                since: startDate,
-                seenStableIDs: &seenStableIDs
-            ) {
-                parsedEvents.append(event)
+            if let event = tokenEvent(inCaptureFile: fileURL, since: startDate) {
+                merge(event)
             }
+        }
+
+        let parsedEvents = latestEventsByStableID.map { stableID, event in
+            AITokenUsageEvent(
+                sourceID: event.sourceID,
+                timestamp: earliestTimestampsByStableID[stableID] ?? event.timestamp,
+                breakdown: event.breakdown,
+                model: event.model,
+                stableID: stableID
+            )
         }
 
         return result(
@@ -550,33 +753,33 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
 
     private func tokenEvents(
         inProjectFile fileURL: URL,
-        since startDate: Date,
-        seenStableIDs: inout Set<String>
+        since startDate: Date
     ) -> [AITokenUsageEvent] {
-        guard let content = tailContent(of: fileURL) else {
-            return []
-        }
-
-        return content
-            .split(whereSeparator: \.isNewline)
-            .compactMap { line in
-                claudeProjectEvent(
-                    from: String(line),
+        var events: [AITokenUsageEvent] = []
+        _ = scanJSONLFile(
+            at: fileURL,
+            startingAt: 0,
+            carrying: Data(),
+            markers: [Self.usageMarker],
+            handleObject: { object in
+                if let event = claudeProjectEvent(
+                    from: object,
                     fileURL: fileURL,
-                    since: startDate,
-                    seenStableIDs: &seenStableIDs
-                )
+                    since: startDate
+                ) {
+                    events.append(event)
+                }
             }
+        )
+        return events
     }
 
     private func claudeProjectEvent(
-        from line: String,
+        from object: [String: Any],
         fileURL: URL,
-        since startDate: Date,
-        seenStableIDs: inout Set<String>
+        since startDate: Date
     ) -> AITokenUsageEvent? {
-        guard let object = jsonObject(from: line),
-              let message = object["message"] as? [String: Any],
+        guard let message = object["message"] as? [String: Any],
               let usage = message["usage"] as? [String: Any],
               let timestampString = stringValue(object["timestamp"]),
               let timestamp = ISO8601DateFormatter.notchFlowDate(from: timestampString),
@@ -587,15 +790,14 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
 
         let sessionID = stringValue(object["sessionId"]) ?? fileURL.deletingPathExtension().lastPathComponent
         let messageID = stringValue(message["id"]) ?? stringValue(object["uuid"]) ?? timestampString
-        let stableID = "claude-project:\(sessionID):\(messageID)"
-        guard seenStableIDs.insert(stableID).inserted else {
-            return nil
-        }
-
         let breakdown = claudeBreakdown(from: usage)
         guard breakdown.totalTokens > 0 else {
             return nil
         }
+
+        let stableID = stringValue(message["id"]) != nil
+            ? "claude:\(messageID)"
+            : "claude-project:\(sessionID):\(messageID)"
 
         return AITokenUsageEvent(
             sourceID: sourceID,
@@ -608,8 +810,7 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
 
     private func tokenEvent(
         inCaptureFile fileURL: URL,
-        since startDate: Date,
-        seenStableIDs: inout Set<String>
+        since startDate: Date
     ) -> AITokenUsageEvent? {
         guard let data = try? Data(contentsOf: fileURL),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -618,13 +819,11 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
             return nil
         }
 
-        let timestamp = fileModificationDate(fileURL) ?? Date.distantPast
+        let timestamp = stringValue(object["timestamp"])
+            .flatMap(ISO8601DateFormatter.notchFlowDate(from:))
+            ?? fileModificationDate(fileURL)
+            ?? Date.distantPast
         guard timestamp >= startDate else {
-            return nil
-        }
-
-        let stableID = "claude-capture:\(stringValue(object["id"]) ?? fileURL.path)"
-        guard seenStableIDs.insert(stableID).inserted else {
             return nil
         }
 
@@ -632,6 +831,9 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
         guard breakdown.totalTokens > 0 else {
             return nil
         }
+
+        let responseID = stringValue(object["id"])
+        let stableID = responseID.map { "claude:\($0)" } ?? "claude-capture:\(fileURL.path)"
 
         return AITokenUsageEvent(
             sourceID: sourceID,
@@ -655,56 +857,160 @@ struct ClaudeTokenUsageSourceReader: AITokenUsageSourceReading, @unchecked Senda
         try? fileManager.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
     }
 
-    private static let maxReadBytes = 2 * 1024 * 1024
-
-    private func tailContent(of fileURL: URL) -> String? {
-        guard let attrs = try? fileManager.attributesOfItem(atPath: fileURL.path),
-              let fileSize = attrs[.size] as? Int
-        else {
-            return try? String(contentsOf: fileURL, encoding: .utf8)
-        }
-
-        if fileSize <= Self.maxReadBytes {
-            return try? String(contentsOf: fileURL, encoding: .utf8)
-        }
-
-        guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
-            return nil
-        }
-        defer { try? handle.close() }
-
-        let offset = UInt64(fileSize - Self.maxReadBytes)
-        try? handle.seek(toOffset: offset)
-        guard let data = try? handle.readToEnd() else {
-            return nil
-        }
-
-        guard var text = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        if let firstNewline = text.firstIndex(of: "\n") {
-            text = String(text[text.index(after: firstNewline)...])
-        }
-        return text
-    }
-
     private func directoryExists(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
-    static func defaultProjectDirectories(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
+    static func defaultProjectDirectories(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String]? = nil
+    ) -> [URL] {
         [
-            homeDirectory.appendingPathComponent(".claude/projects", isDirectory: true),
+            configurationRoot(homeDirectory: homeDirectory, environment: environment)
+                .appendingPathComponent("projects", isDirectory: true),
         ]
     }
 
-    static func defaultCaptureDirectories(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
+    static func defaultCaptureDirectories(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String]? = nil
+    ) -> [URL] {
         [
-            homeDirectory.appendingPathComponent(".claude/cc-capture", isDirectory: true),
+            configurationRoot(homeDirectory: homeDirectory, environment: environment)
+                .appendingPathComponent("cc-capture", isDirectory: true),
         ]
     }
+
+    private static func configurationRoot(
+        homeDirectory: URL,
+        environment: [String: String]?
+    ) -> URL {
+        let environment = environment ?? ProcessInfo.processInfo.environment
+        guard let customPath = environment["CLAUDE_CONFIG_DIR"], !customPath.isEmpty else {
+            return homeDirectory.appendingPathComponent(".claude", isDirectory: true)
+        }
+        return URL(fileURLWithPath: customPath, isDirectory: true).standardizedFileURL
+    }
+
+    private static let usageMarker = Data("\"usage\"".utf8)
+}
+
+private struct JSONLScanState {
+    let byteOffset: UInt64
+    let trailingData: Data
+}
+
+private func scanJSONLFile(
+    at fileURL: URL,
+    startingAt byteOffset: UInt64,
+    carrying trailingData: Data,
+    markers: [Data],
+    handleObject: ([String: Any]) -> Void
+) -> JSONLScanState? {
+    guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
+        return nil
+    }
+    defer { try? handle.close() }
+
+    do {
+        try handle.seek(toOffset: byteOffset)
+        var buffer = trailingData
+
+        while let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+            guard !Task.isCancelled else {
+                return nil
+            }
+            buffer.append(chunk)
+            var lineStart = buffer.startIndex
+
+            while let newline = buffer[lineStart...].firstIndex(of: 0x0A) {
+                let lineRange = lineStart ..< newline
+                let containsRelevantMarker = markers.contains { marker in
+                    buffer.range(of: marker, options: [], in: lineRange) != nil
+                }
+                if containsRelevantMarker,
+                   let object = jsonObject(from: Data(buffer[lineRange]))
+                {
+                    handleObject(object)
+                }
+                lineStart = buffer.index(after: newline)
+            }
+
+            if lineStart > buffer.startIndex {
+                buffer.removeSubrange(buffer.startIndex ..< lineStart)
+            }
+        }
+
+        // A JSONL file does not always end with a newline. Parse a complete,
+        // relevant trailing object; carry the remainder into the next append scan.
+        if !buffer.isEmpty {
+            let containsRelevantMarker = markers.contains { buffer.range(of: $0) != nil }
+            if containsRelevantMarker, let object = jsonObject(from: buffer) {
+                handleObject(object)
+                buffer.removeAll(keepingCapacity: false)
+            }
+        }
+
+        return JSONLScanState(
+            byteOffset: try handle.offset(),
+            trailingData: buffer
+        )
+    } catch {
+        return nil
+    }
+}
+
+private func jsonObject(from data: Data) -> [String: Any]? {
+    try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+}
+
+private func codexSessionID(from fileURL: URL) -> String {
+    let stem = fileURL.deletingPathExtension().lastPathComponent
+    let suffix = String(stem.suffix(36))
+    if UUID(uuidString: suffix) != nil {
+        return suffix.lowercased()
+    }
+    return fileURL.standardizedFileURL.path.lowercased()
+}
+
+private func normalizedThreadID(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else {
+        return nil
+    }
+    return value.lowercased()
+}
+
+private func parentThreadID(from payload: [String: Any]) -> String? {
+    guard let source = payload["source"] as? [String: Any],
+          let subagent = source["subagent"] as? [String: Any],
+          let threadSpawn = subagent["thread_spawn"] as? [String: Any]
+    else {
+        return nil
+    }
+    return normalizedThreadID(stringValue(threadSpawn["parent_thread_id"]))
+}
+
+private func fileSize(of fileURL: URL, fileManager: FileManager) -> UInt64? {
+    guard let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path) else {
+        return nil
+    }
+    if let number = attributes[.size] as? NSNumber {
+        return number.uint64Value
+    }
+    if let value = attributes[.size] as? Int {
+        return UInt64(value)
+    }
+    return nil
+}
+
+private func shouldReadUsageFile(_ fileURL: URL, since startDate: Date, fileManager: FileManager) -> Bool {
+    guard let modificationDate = try? fileManager
+        .attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date
+    else {
+        return true
+    }
+    return modificationDate >= startDate
 }
 
 struct AITokenUsagePresenceSourceReader: AITokenUsageSourceReading, @unchecked Sendable {
@@ -965,24 +1271,30 @@ final class AITokenUsageService: ObservableObject {
 
     private nonisolated static let cleanableDirectories: [URL] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
+        let codexDirectories = [
             home.appendingPathComponent(".codex/sessions", isDirectory: true),
+            home.appendingPathComponent(".codex/archived_sessions", isDirectory: true),
             home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true),
             home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true),
-            home.appendingPathComponent(".claude/projects", isDirectory: true),
-            home.appendingPathComponent(".claude/cc-capture", isDirectory: true),
         ]
+        return codexDirectories
+            + ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: home)
+            + ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: home)
     }()
 
     private nonisolated static let sourceDirectoryMapping: [(sourceID: AITokenUsageSourceID, url: URL)] = {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        return [
+        let codexMappings: [(sourceID: AITokenUsageSourceID, url: URL)] = [
             (.codex, home.appendingPathComponent(".codex/sessions", isDirectory: true)),
+            (.codex, home.appendingPathComponent(".codex/archived_sessions", isDirectory: true)),
             (.codex, home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true)),
             (.codex, home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true)),
-            (.claude, home.appendingPathComponent(".claude/projects", isDirectory: true)),
-            (.claude, home.appendingPathComponent(".claude/cc-capture", isDirectory: true)),
         ]
+        let claudeMappings = (
+            ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: home)
+                + ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: home)
+        ).map { (sourceID: AITokenUsageSourceID.claude, url: $0) }
+        return codexMappings + claudeMappings
     }()
 
     func calculateDiskUsage() {
@@ -1144,21 +1456,11 @@ private final class AITokenUsageRefreshWorker: @unchecked Sendable {
     }
 }
 
-private func jsonObject(from line: String) -> [String: Any]? {
-    guard let data = line.data(using: .utf8),
-          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-        return nil
-    }
-
-    return object
-}
-
 private func stringValue(_ value: Any?) -> String? {
     value as? String
 }
 
-private func intValue(_ value: Any?) -> Int {
+private func intValueIfPresent(_ value: Any?) -> Int? {
     switch value {
     case let int as Int:
         return int
@@ -1167,8 +1469,12 @@ private func intValue(_ value: Any?) -> Int {
     case let number as NSNumber:
         return number.intValue
     case let string as String:
-        return Int(string) ?? 0
+        return Int(string)
     default:
-        return 0
+        return nil
     }
+}
+
+private func intValue(_ value: Any?) -> Int {
+    intValueIfPresent(value) ?? 0
 }
