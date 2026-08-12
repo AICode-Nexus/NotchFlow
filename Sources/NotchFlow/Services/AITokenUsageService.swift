@@ -125,9 +125,220 @@ struct AITokenUsageEvent: Equatable, Codable, Sendable {
 struct AITokenUsageDirectoryInfo: Equatable, Identifiable, Sendable {
     let url: URL
     let displayPath: String
+    let sizeBytes: Int64
     let sizeText: String
 
     var id: String { url.path }
+}
+
+struct AITokenUsageStorageDirectory: Equatable, Sendable {
+    let sourceID: AITokenUsageSourceID
+    let url: URL
+}
+
+struct AITokenUsageCleanupPreview: Equatable, Sendable {
+    let fileCount: Int
+    let bytes: Int64
+
+    static let empty = AITokenUsageCleanupPreview(fileCount: 0, bytes: 0)
+}
+
+struct AITokenUsageStorageSnapshot: Equatable, Sendable {
+    let totalBytes: Int64
+    let sourceDirectories: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]]
+    let cleanupPreview: AITokenUsageCleanupPreview
+
+    static let empty = AITokenUsageStorageSnapshot(
+        totalBytes: 0,
+        sourceDirectories: [:],
+        cleanupPreview: .empty
+    )
+}
+
+struct AITokenUsageCleanupResult: Equatable, Sendable {
+    let deletedFileCount: Int
+    let freedBytes: Int64
+    let failedFileCount: Int
+}
+
+protocol AITokenUsageStorageManaging: Sendable {
+    func snapshot(retentionDays: Int, now: Date, calendar: Calendar) -> AITokenUsageStorageSnapshot
+    func clearExpiredLogs(retentionDays: Int, now: Date, calendar: Calendar) -> AITokenUsageCleanupResult
+}
+
+final class AITokenUsageStorageManager: AITokenUsageStorageManaging, @unchecked Sendable {
+    typealias RemoveItem = (URL) throws -> Void
+
+    private let directories: [AITokenUsageStorageDirectory]
+    private let fileManager: FileManager
+    private let removeItem: RemoveItem
+
+    init(
+        directories: [AITokenUsageStorageDirectory],
+        fileManager: FileManager = .default,
+        removeItem: RemoveItem? = nil
+    ) {
+        var seenPaths: Set<String> = []
+        self.directories = directories.filter { directory in
+            seenPaths.insert(directory.url.standardizedFileURL.path).inserted
+        }
+        self.fileManager = fileManager
+        self.removeItem = removeItem ?? { url in
+            try fileManager.removeItem(at: url)
+        }
+    }
+
+    func snapshot(
+        retentionDays: Int,
+        now: Date,
+        calendar: Calendar
+    ) -> AITokenUsageStorageSnapshot {
+        guard let cutoffDate = cutoffDate(retentionDays: retentionDays, now: now, calendar: calendar) else {
+            return .empty
+        }
+
+        let homePath = fileManager.homeDirectoryForCurrentUser.standardizedFileURL.path
+        var totalBytes: Int64 = 0
+        var previewFileCount = 0
+        var previewBytes: Int64 = 0
+        var sourceDirectories: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]] = [:]
+
+        for directory in directories where directoryExists(directory.url) {
+            guard !Task.isCancelled else {
+                return .empty
+            }
+
+            var directoryBytes: Int64 = 0
+            for file in usageFiles(in: directory.url) {
+                directoryBytes += file.size
+                if let modificationDate = file.modificationDate, modificationDate < cutoffDate {
+                    previewFileCount += 1
+                    previewBytes += file.size
+                }
+            }
+            totalBytes += directoryBytes
+
+            let standardizedPath = directory.url.standardizedFileURL.path
+            let displayPath = standardizedPath == homePath
+                ? "~"
+                : standardizedPath.hasPrefix(homePath + "/")
+                    ? "~" + standardizedPath.dropFirst(homePath.count)
+                    : standardizedPath
+            sourceDirectories[directory.sourceID, default: []].append(
+                AITokenUsageDirectoryInfo(
+                    url: directory.url,
+                    displayPath: String(displayPath),
+                    sizeBytes: directoryBytes,
+                    sizeText: Self.byteCount(directoryBytes)
+                )
+            )
+        }
+
+        return AITokenUsageStorageSnapshot(
+            totalBytes: totalBytes,
+            sourceDirectories: sourceDirectories,
+            cleanupPreview: AITokenUsageCleanupPreview(
+                fileCount: previewFileCount,
+                bytes: previewBytes
+            )
+        )
+    }
+
+    func clearExpiredLogs(
+        retentionDays: Int,
+        now: Date,
+        calendar: Calendar
+    ) -> AITokenUsageCleanupResult {
+        guard let cutoffDate = cutoffDate(retentionDays: retentionDays, now: now, calendar: calendar) else {
+            return AITokenUsageCleanupResult(deletedFileCount: 0, freedBytes: 0, failedFileCount: 0)
+        }
+
+        var deletedFileCount = 0
+        var freedBytes: Int64 = 0
+        var failedFileCount = 0
+
+        for directory in directories where directoryExists(directory.url) {
+            for file in usageFiles(in: directory.url) {
+                guard let modificationDate = file.modificationDate, modificationDate < cutoffDate else {
+                    continue
+                }
+
+                do {
+                    try removeItem(file.url)
+                    deletedFileCount += 1
+                    freedBytes += file.size
+                } catch {
+                    failedFileCount += 1
+                }
+            }
+        }
+
+        return AITokenUsageCleanupResult(
+            deletedFileCount: deletedFileCount,
+            freedBytes: freedBytes,
+            failedFileCount: failedFileCount
+        )
+    }
+
+    private func usageFiles(in root: URL) -> [(url: URL, size: Int64, modificationDate: Date?)] {
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        var files: [(url: URL, size: Int64, modificationDate: Date?)] = []
+        while let fileURL = enumerator.nextObject() as? URL {
+            guard !Task.isCancelled else {
+                break
+            }
+            guard Self.isCleanableFile(fileURL),
+                  let values = try? fileURL.resourceValues(
+                      forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
+                  ),
+                  values.isRegularFile == true
+            else {
+                continue
+            }
+            files.append(
+                (
+                    url: fileURL,
+                    size: Int64(values.fileSize ?? 0),
+                    modificationDate: values.contentModificationDate
+                )
+            )
+        }
+        return files
+    }
+
+    private func cutoffDate(retentionDays: Int, now: Date, calendar: Calendar) -> Date? {
+        guard retentionDays > 0 else {
+            return nil
+        }
+        return calendar.date(
+            byAdding: .day,
+            value: -retentionDays,
+            to: calendar.startOfDay(for: now)
+        )
+    }
+
+    private func directoryExists(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    private static func isCleanableFile(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        if ext == "jsonl" { return true }
+        if ext == "json" && url.lastPathComponent.hasSuffix(".response.json") { return true }
+        return false
+    }
+
+    static func byteCount(_ value: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: value, countStyle: .file)
+    }
 }
 
 struct AITokenUsageSourceStatus: Equatable, Identifiable, Codable, Sendable {
@@ -1043,26 +1254,39 @@ final class AITokenUsageService: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published private(set) var statusMessage = "AI 用量统计已关闭"
     @Published private(set) var diskUsageText = "计算中..."
+    @Published private(set) var diskUsageBytes: Int64 = 0
     @Published private(set) var sourceDirectories: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]] = [:]
+    @Published private(set) var cleanupPreview: AITokenUsageCleanupPreview = .empty
+    @Published private(set) var isCalculatingStorage = false
     @Published private(set) var isClearing = false
     @Published private(set) var lastClearResult: String?
 
     private let settings: AppSettings
     private let calendar: Calendar
     private let refreshWorker: AITokenUsageRefreshWorker
+    private let storageManager: AITokenUsageStorageManaging
+    private let nowProvider: @Sendable () -> Date
     private let refreshInterval: TimeInterval = 5 * 60
     private let historyDays = 30
     private var refreshTimer: Timer?
     private var refreshTask: Task<Void, Never>?
+    private var storageTask: Task<Void, Never>?
+    private var cleanupTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         settings: AppSettings,
         readers: [AITokenUsageSourceReading]? = nil,
-        calendar: Calendar = .current
+        storageManager: AITokenUsageStorageManaging? = nil,
+        calendar: Calendar = .current,
+        nowProvider: @escaping @Sendable () -> Date = Date.init
     ) {
         self.settings = settings
         self.calendar = calendar
+        self.storageManager = storageManager ?? AITokenUsageStorageManager(
+            directories: Self.defaultStorageDirectories()
+        )
+        self.nowProvider = nowProvider
         refreshWorker = AITokenUsageRefreshWorker(
             readers: readers ?? Self.defaultReaders(),
             calendar: calendar
@@ -1089,6 +1313,16 @@ final class AITokenUsageService: ObservableObject {
         return Self.timeFormatter.string(from: refreshedAt)
     }
 
+    var cleanupPreviewText: String {
+        if isCalculatingStorage {
+            return "计算中..."
+        }
+        guard cleanupPreview.fileCount > 0 else {
+            return "没有可清理文件"
+        }
+        return "\(cleanupPreview.fileCount) 个文件、\(AITokenUsageStorageManager.byteCount(cleanupPreview.bytes))"
+    }
+
     func start() {
         bindSettings()
         calculateDiskUsage()
@@ -1102,11 +1336,15 @@ final class AITokenUsageService: ObservableObject {
     func stop() {
         refreshTask?.cancel()
         refreshTask = nil
+        storageTask?.cancel()
+        storageTask = nil
+        cleanupTask?.cancel()
+        cleanupTask = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
-        refreshTask?.cancel()
-        refreshTask = nil
         isRefreshing = false
+        isCalculatingStorage = false
+        isClearing = false
         cancellables.removeAll()
     }
 
@@ -1135,7 +1373,7 @@ final class AITokenUsageService: ObservableObject {
             return
         }
 
-        guard !isRefreshing else {
+        guard !isRefreshing, !isClearing else {
             return
         }
 
@@ -1163,6 +1401,7 @@ final class AITokenUsageService: ObservableObject {
                 self.statusMessage = result.statusMessage
                 self.isRefreshing = false
                 self.refreshTask = nil
+                self.calculateDiskUsage()
             }
         }
     }
@@ -1191,6 +1430,14 @@ final class AITokenUsageService: ObservableObject {
                     self.isRefreshing = false
                     self.statusMessage = "AI 用量统计已关闭"
                 }
+            }
+            .store(in: &cancellables)
+
+        settings.$logRetentionPreset
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.calculateDiskUsage()
             }
             .store(in: &cancellables)
     }
@@ -1269,142 +1516,119 @@ final class AITokenUsageService: ObservableObject {
 
     // MARK: - Disk Usage & Cleanup
 
-    private nonisolated static let cleanableDirectories: [URL] = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+    private nonisolated static func defaultStorageDirectories(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [AITokenUsageStorageDirectory] {
         let codexDirectories = [
-            home.appendingPathComponent(".codex/sessions", isDirectory: true),
-            home.appendingPathComponent(".codex/archived_sessions", isDirectory: true),
-            home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true),
-            home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true),
-        ]
-        return codexDirectories
-            + ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: home)
-            + ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: home)
-    }()
+            homeDirectory.appendingPathComponent(".codex/sessions", isDirectory: true),
+            homeDirectory.appendingPathComponent(".codex/archived_sessions", isDirectory: true),
+            homeDirectory.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true),
+            homeDirectory.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true),
+        ].map { AITokenUsageStorageDirectory(sourceID: .codex, url: $0) }
 
-    private nonisolated static let sourceDirectoryMapping: [(sourceID: AITokenUsageSourceID, url: URL)] = {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let codexMappings: [(sourceID: AITokenUsageSourceID, url: URL)] = [
-            (.codex, home.appendingPathComponent(".codex/sessions", isDirectory: true)),
-            (.codex, home.appendingPathComponent(".codex/archived_sessions", isDirectory: true)),
-            (.codex, home.appendingPathComponent(".codex-shared/session-pool/sessions", isDirectory: true)),
-            (.codex, home.appendingPathComponent(".codex-shared/session-pool/archived_sessions", isDirectory: true)),
-        ]
-        let claudeMappings = (
-            ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: home)
-                + ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: home)
-        ).map { (sourceID: AITokenUsageSourceID.claude, url: $0) }
-        return codexMappings + claudeMappings
-    }()
+        let claudeDirectories = (
+            ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: homeDirectory)
+                + ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: homeDirectory)
+        ).map { AITokenUsageStorageDirectory(sourceID: .claude, url: $0) }
+
+        return codexDirectories + claudeDirectories
+    }
 
     func calculateDiskUsage() {
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            let homePath = fm.homeDirectoryForCurrentUser.path
-            var totalBytes: Int64 = 0
-            var dirInfos: [AITokenUsageSourceID: [AITokenUsageDirectoryInfo]] = [:]
+        storageTask?.cancel()
+        isCalculatingStorage = true
 
-            for entry in Self.sourceDirectoryMapping {
-                var dirBytes: Int64 = 0
+        let retentionDays = settings.logRetentionPreset.rawValue
+        let now = nowProvider()
+        let calendar = calendar
+        let storageManager = storageManager
 
-                if let enumerator = fm.enumerator(
-                    at: entry.url,
-                    includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
-                    options: [.skipsHiddenFiles]
-                ) {
-                    while let fileURL = enumerator.nextObject() as? URL {
-                        guard Self.isCleanableFile(fileURL) else { continue }
-                        if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                            dirBytes += Int64(size)
-                        }
-                    }
-                }
+        storageTask = Task.detached(priority: .utility) { [weak self] in
+            let snapshot = storageManager.snapshot(
+                retentionDays: retentionDays,
+                now: now,
+                calendar: calendar
+            )
+            guard !Task.isCancelled else { return }
 
-                totalBytes += dirBytes
-
-                let displayPath = entry.url.path.replacingOccurrences(of: homePath, with: "~")
-                let sizeText = ByteCountFormatter.string(fromByteCount: dirBytes, countStyle: .file)
-                let info = AITokenUsageDirectoryInfo(url: entry.url, displayPath: displayPath, sizeText: sizeText)
-                dirInfos[entry.sourceID, default: []].append(info)
-            }
-
-            let text = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-
-            await MainActor.run {
-                self.diskUsageText = text
-                self.sourceDirectories = dirInfos
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else { return }
+                self.applyStorageSnapshot(snapshot)
+                self.isCalculatingStorage = false
+                self.storageTask = nil
             }
         }
     }
 
     func clearOldLogs(retentionDays: Int) {
-        guard !isClearing else { return }
+        guard !isClearing, retentionDays > 0 else { return }
 
         isClearing = true
         lastClearResult = nil
 
-        let cutoffDate = Calendar.current.date(
-            byAdding: .day,
-            value: -retentionDays,
-            to: Calendar.current.startOfDay(for: Date())
-        ) ?? Date.distantPast
+        let runningRefreshTask = refreshTask
+        let runningStorageTask = storageTask
+        runningRefreshTask?.cancel()
+        runningStorageTask?.cancel()
+        let storageManager = storageManager
+        let calendar = calendar
+        let now = nowProvider()
 
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            var deletedCount = 0
-            var freedBytes: Int64 = 0
-            let directories = Self.cleanableDirectories
+        cleanupTask = Task { @MainActor [weak self] in
+            await runningRefreshTask?.value
+            await runningStorageTask?.value
+            guard let self, !Task.isCancelled else { return }
 
-            for directory in directories {
-                guard let enumerator = fm.enumerator(
-                    at: directory,
-                    includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey],
-                    options: [.skipsHiddenFiles]
-                ) else {
-                    continue
-                }
+            self.refreshTask = nil
+            self.storageTask = nil
+            self.isRefreshing = false
+            self.isCalculatingStorage = true
 
-                while let fileURL = enumerator.nextObject() as? URL {
-                    guard Self.isCleanableFile(fileURL) else { continue }
+            let result = await Task.detached(priority: .utility) {
+                storageManager.clearExpiredLogs(
+                    retentionDays: retentionDays,
+                    now: now,
+                    calendar: calendar
+                )
+            }.value
+            let snapshot = await Task.detached(priority: .utility) {
+                storageManager.snapshot(
+                    retentionDays: retentionDays,
+                    now: now,
+                    calendar: calendar
+                )
+            }.value
 
-                    guard let values = try? fileURL.resourceValues(
-                        forKeys: [.contentModificationDateKey, .fileSizeKey]
-                    ),
-                        let modDate = values.contentModificationDate,
-                        modDate < cutoffDate
-                    else {
-                        continue
-                    }
-
-                    let fileSize = Int64(values.fileSize ?? 0)
-                    do {
-                        try fm.removeItem(at: fileURL)
-                        deletedCount += 1
-                        freedBytes += fileSize
-                    } catch {
-                        continue
-                    }
-                }
-            }
-
-            let freedText = ByteCountFormatter.string(fromByteCount: freedBytes, countStyle: .file)
-
-            await MainActor.run {
-                self.isClearing = false
-                self.lastClearResult = deletedCount > 0
-                    ? "已清除 \(deletedCount) 个文件，释放 \(freedText)"
-                    : "没有需要清除的文件"
-                self.calculateDiskUsage()
-                self.refresh()
-            }
+            guard !Task.isCancelled else { return }
+            self.applyStorageSnapshot(snapshot)
+            self.isCalculatingStorage = false
+            self.lastClearResult = Self.cleanupResultText(result)
+            self.summary = .empty
+            self.isClearing = false
+            self.cleanupTask = nil
+            self.refresh()
         }
     }
 
-    private nonisolated static func isCleanableFile(_ url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        if ext == "jsonl" { return true }
-        if ext == "json" && url.lastPathComponent.hasSuffix(".response.json") { return true }
-        return false
+    private func applyStorageSnapshot(_ snapshot: AITokenUsageStorageSnapshot) {
+        diskUsageBytes = snapshot.totalBytes
+        diskUsageText = AITokenUsageStorageManager.byteCount(snapshot.totalBytes)
+        sourceDirectories = snapshot.sourceDirectories
+        cleanupPreview = snapshot.cleanupPreview
+    }
+
+    private nonisolated static func cleanupResultText(_ result: AITokenUsageCleanupResult) -> String {
+        let failureSuffix = result.failedFileCount > 0
+            ? "；另有 \(result.failedFileCount) 个文件清除失败"
+            : ""
+
+        if result.deletedFileCount > 0 {
+            return "已清除 \(result.deletedFileCount) 个文件，释放 \(AITokenUsageStorageManager.byteCount(result.freedBytes))\(failureSuffix)"
+        }
+        if result.failedFileCount > 0 {
+            return "没有成功清除文件\(failureSuffix)"
+        }
+        return "没有需要清除的文件"
     }
 }
 

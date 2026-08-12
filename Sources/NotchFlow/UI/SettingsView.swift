@@ -611,6 +611,7 @@ struct SettingsView: View {
 
         Section("存储管理") {
             LabeledContent("日志占用", value: model.aiTokenUsage.diskUsageText)
+            LabeledContent("预计可清理", value: model.aiTokenUsage.cleanupPreviewText)
 
             Picker(
                 "保留天数",
@@ -627,7 +628,11 @@ struct SettingsView: View {
             Button("清除历史日志") {
                 showClearConfirmation = true
             }
-            .disabled(model.aiTokenUsage.isClearing)
+            .disabled(
+                model.aiTokenUsage.isClearing
+                    || model.aiTokenUsage.isCalculatingStorage
+                    || model.aiTokenUsage.cleanupPreview.fileCount == 0
+            )
             .confirmationDialog(
                 "确认清除",
                 isPresented: $showClearConfirmation
@@ -637,7 +642,13 @@ struct SettingsView: View {
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("将删除修改时间超过 \(model.settings.logRetentionPreset.title) 的 AI 工具日志文件（.jsonl），此操作不可撤销。")
+                Text("预计永久删除 \(model.aiTokenUsage.cleanupPreviewText)。这些是 Codex/Claude 原始会话日志（.jsonl 和 .response.json），会影响历史用量统计和旧会话恢复，且无法撤销。")
+            }
+
+            if model.settings.logRetentionPreset.rawValue < 30 {
+                Text("当前保留时间少于 30 天，清理后“近 30 天”用量将不完整。")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
             }
 
             if model.aiTokenUsage.isClearing {
