@@ -6,6 +6,7 @@ protocol WallpaperFileScanning: Sendable {
     func wallpaperURL(in directoryURL: URL, excluding lastWallpaperURL: URL?) -> URL?
 }
 
+@MainActor
 protocol WallpaperApplying: Sendable {
     func applyWallpaper(_ wallpaperURL: URL) throws
 }
@@ -41,6 +42,7 @@ final class WallpaperRefreshService: ObservableObject {
     private let wallpaperApplier: any WallpaperApplying
     private var refreshTimer: Timer?
     private var refreshTask: Task<Void, Never>?
+    private var refreshGeneration: UInt64 = 0
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -118,9 +120,7 @@ final class WallpaperRefreshService: ObservableObject {
     func stop() {
         refreshTimer?.invalidate()
         refreshTimer = nil
-        refreshTask?.cancel()
-        refreshTask = nil
-        isRefreshing = false
+        cancelRefresh()
         nextRefreshDate = nil
         cancellables.removeAll()
     }
@@ -148,11 +148,9 @@ final class WallpaperRefreshService: ObservableObject {
     }
 
     func clearWallpaperFolder() {
-        refreshTask?.cancel()
-        refreshTask = nil
+        cancelRefresh()
         selectedDirectoryURL = nil
         lastWallpaperURL = nil
-        isRefreshing = false
         nextRefreshDate = nil
         refreshTimer?.invalidate()
         refreshTimer = nil
@@ -182,6 +180,7 @@ final class WallpaperRefreshService: ObservableObject {
 
         guard fileManager.fileExists(atPath: selectedDirectoryURL.path) else {
             statusMessage = "壁纸文件夹不可用"
+            syncAutomaticRefreshSchedule()
             return
         }
 
@@ -189,8 +188,10 @@ final class WallpaperRefreshService: ObservableObject {
         statusMessage = "正在挑选壁纸..."
 
         let previousWallpaperURL = lastWallpaperURL
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
 
-        refreshTask = Task.detached(priority: .utility) { [fileScanner, wallpaperApplier] in
+        refreshTask = Task.detached(priority: .utility) { [fileScanner] in
             let wallpaperURL = fileScanner.wallpaperURL(
                 in: selectedDirectoryURL,
                 excluding: previousWallpaperURL
@@ -199,56 +200,55 @@ final class WallpaperRefreshService: ObservableObject {
                 return
             }
 
-            let result: WallpaperRefreshResult
-            if let wallpaperURL {
-                do {
-                    try wallpaperApplier.applyWallpaper(wallpaperURL)
-                    result = .success(wallpaperURL)
-                } catch {
-                    result = .failure(error.localizedDescription)
-                }
-            } else {
-                result = .empty
-            }
-
             await MainActor.run { [weak self] in
                 guard let self, !Task.isCancelled else {
                     return
                 }
 
-                guard self.selectedDirectoryURL == selectedDirectoryURL else {
-                    self.isRefreshing = false
-                    self.refreshTask = nil
+                guard self.refreshGeneration == generation,
+                      self.selectedDirectoryURL == selectedDirectoryURL
+                else {
                     return
                 }
 
-                switch result {
-                case .empty:
+                guard let wallpaperURL else {
                     self.isRefreshing = false
                     self.refreshTask = nil
                     self.statusMessage = "文件夹内没有可用图片"
-                case let .success(wallpaperURL):
+                    self.syncAutomaticRefreshSchedule()
+                    return
+                }
+
+                do {
+                    try self.wallpaperApplier.applyWallpaper(wallpaperURL)
                     self.lastWallpaperURL = wallpaperURL
                     self.defaults.set(wallpaperURL.path, forKey: Keys.lastWallpaperPath)
                     self.statusMessage = "已刷新：\(wallpaperURL.deletingPathExtension().lastPathComponent)"
-                    self.isRefreshing = false
-                    self.refreshTask = nil
-                    self.syncAutomaticRefreshSchedule()
-                case let .failure(message):
-                    self.statusMessage = "刷新失败：\(message)"
-                    self.isRefreshing = false
-                    self.refreshTask = nil
+                } catch {
+                    self.statusMessage = "刷新失败：\(error.localizedDescription)"
                 }
+
+                self.isRefreshing = false
+                self.refreshTask = nil
+                self.syncAutomaticRefreshSchedule()
             }
         }
     }
 
-    private func setWallpaperFolder(_ folderURL: URL) {
+    func setWallpaperFolder(_ folderURL: URL) {
+        cancelRefresh()
         let resolvedURL = folderURL.standardizedFileURL
         selectedDirectoryURL = resolvedURL
         defaults.set(resolvedURL.path, forKey: Keys.selectedFolderPath)
         statusMessage = "已选择：\(resolvedURL.lastPathComponent)"
         syncAutomaticRefreshSchedule()
+    }
+
+    private func cancelRefresh() {
+        refreshGeneration &+= 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        isRefreshing = false
     }
 
     private func bindSettings() {
@@ -307,12 +307,6 @@ final class WallpaperRefreshService: ObservableObject {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
-}
-
-private enum WallpaperRefreshResult: Sendable {
-    case empty
-    case success(URL)
-    case failure(String)
 }
 
 private final class WallpaperRefreshFileScanner: WallpaperFileScanning, @unchecked Sendable {

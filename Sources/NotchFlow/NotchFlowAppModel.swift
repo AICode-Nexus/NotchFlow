@@ -1,4 +1,5 @@
 import Carbon
+import Combine
 import Foundation
 
 @MainActor
@@ -20,6 +21,10 @@ final class NotchFlowAppModel: ObservableObject {
     let screenHealth: ScreenHealthService
     let panelController: NotchPanelController
     let hotKeyManager: GlobalHotKeyManager
+
+    private var isStarted = false
+    private var nowPlayingSettingCancellable: AnyCancellable?
+    private var panelStateCancellable: AnyCancellable?
 
     private init() {
         settings = AppSettings()
@@ -53,6 +58,11 @@ final class NotchFlowAppModel: ObservableObject {
         ) { [weak panelController] in
             panelController?.toggleFromHotKey()
         }
+
+        panelStateCancellable = panelController.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
     }
 
     var menuBarIconName: String {
@@ -68,8 +78,13 @@ final class NotchFlowAppModel: ObservableObject {
     }
 
     func start() {
+        guard !isStarted else {
+            return
+        }
+
+        isStarted = true
         panelController.start()
-        nowPlaying.start()
+        bindNowPlayingSetting()
         weather.start()
         battery.start()
         clipboardHistory.start()
@@ -92,11 +107,15 @@ final class NotchFlowAppModel: ObservableObject {
     }
 
     func stop() {
+        isStarted = false
+        nowPlayingSettingCancellable?.cancel()
+        nowPlayingSettingCancellable = nil
         nowPlaying.stop()
         weather.stop()
         battery.stop()
         clipboardHistory.stop()
         wallpaper.stop()
+        localAppSearch.stop()
         hotKeyManager.unregister()
         chargeLimit.stop()
         aiTokenUsage.stop()
@@ -113,5 +132,25 @@ final class NotchFlowAppModel: ObservableObject {
 
     func repositionPanel() {
         panelController.reposition()
+    }
+
+    private func bindNowPlayingSetting() {
+        guard nowPlayingSettingCancellable == nil else {
+            return
+        }
+
+        nowPlayingSettingCancellable = settings.$nowPlayingEnabled
+            .removeDuplicates()
+            .sink { [weak self] isEnabled in
+                guard let self, self.isStarted else {
+                    return
+                }
+
+                if isEnabled {
+                    self.nowPlaying.start()
+                } else {
+                    self.nowPlaying.stop()
+                }
+            }
     }
 }

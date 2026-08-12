@@ -178,117 +178,119 @@ final class AppSettings: ObservableObject {
         static let screenBreakReminderThresholdPreset = "ScreenBreakReminderThresholdPreset"
     }
 
+    private let defaults: UserDefaults
+
     @Published var hoverToExpand: Bool {
         didSet {
-            UserDefaults.standard.set(hoverToExpand, forKey: Keys.hoverToExpand)
+            defaults.set(hoverToExpand, forKey: Keys.hoverToExpand)
         }
     }
 
     @Published var autoHideDelay: Double {
         didSet {
-            UserDefaults.standard.set(autoHideDelay, forKey: Keys.autoHideDelay)
+            defaults.set(autoHideDelay, forKey: Keys.autoHideDelay)
         }
     }
 
     @Published var weatherEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(weatherEnabled, forKey: Keys.weatherEnabled)
+            defaults.set(weatherEnabled, forKey: Keys.weatherEnabled)
         }
     }
 
     @Published var deviceBatteryEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(deviceBatteryEnabled, forKey: Keys.deviceBatteryEnabled)
+            defaults.set(deviceBatteryEnabled, forKey: Keys.deviceBatteryEnabled)
         }
     }
 
     @Published var clipboardHistoryEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(clipboardHistoryEnabled, forKey: Keys.clipboardHistoryEnabled)
+            defaults.set(clipboardHistoryEnabled, forKey: Keys.clipboardHistoryEnabled)
         }
     }
 
     @Published var wallpaperRefreshEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(wallpaperRefreshEnabled, forKey: Keys.wallpaperRefreshEnabled)
+            defaults.set(wallpaperRefreshEnabled, forKey: Keys.wallpaperRefreshEnabled)
         }
     }
 
     @Published var wallpaperAutoRefreshEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(wallpaperAutoRefreshEnabled, forKey: Keys.wallpaperAutoRefreshEnabled)
+            defaults.set(wallpaperAutoRefreshEnabled, forKey: Keys.wallpaperAutoRefreshEnabled)
         }
     }
 
     @Published var wallpaperRefreshIntervalPreset: WallpaperRefreshIntervalPreset {
         didSet {
-            UserDefaults.standard.set(wallpaperRefreshIntervalPreset.rawValue, forKey: Keys.wallpaperRefreshIntervalPreset)
+            defaults.set(wallpaperRefreshIntervalPreset.rawValue, forKey: Keys.wallpaperRefreshIntervalPreset)
         }
     }
 
     @Published var quickLaunchLayoutMode: QuickLaunchLayoutMode {
         didSet {
-            UserDefaults.standard.set(quickLaunchLayoutMode.rawValue, forKey: Keys.quickLaunchLayoutMode)
+            defaults.set(quickLaunchLayoutMode.rawValue, forKey: Keys.quickLaunchLayoutMode)
         }
     }
 
     @Published var quickLaunchShowsLabels: Bool {
         didSet {
-            UserDefaults.standard.set(quickLaunchShowsLabels, forKey: Keys.quickLaunchShowsLabels)
+            defaults.set(quickLaunchShowsLabels, forKey: Keys.quickLaunchShowsLabels)
         }
     }
 
     @Published var panelAppearanceMode: PanelAppearanceMode {
         didSet {
-            UserDefaults.standard.set(panelAppearanceMode.rawValue, forKey: Keys.panelAppearanceMode)
+            defaults.set(panelAppearanceMode.rawValue, forKey: Keys.panelAppearanceMode)
         }
     }
 
     @Published var panelTextSizePreset: PanelTextSizePreset {
         didSet {
-            UserDefaults.standard.set(panelTextSizePreset.rawValue, forKey: Keys.panelTextSizePreset)
+            defaults.set(panelTextSizePreset.rawValue, forKey: Keys.panelTextSizePreset)
         }
     }
 
     @Published var chargeLimitEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(chargeLimitEnabled, forKey: Keys.chargeLimitEnabled)
+            defaults.set(chargeLimitEnabled, forKey: Keys.chargeLimitEnabled)
         }
     }
 
     @Published var aiTokenUsageEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(aiTokenUsageEnabled, forKey: Keys.aiTokenUsageEnabled)
+            defaults.set(aiTokenUsageEnabled, forKey: Keys.aiTokenUsageEnabled)
         }
     }
 
     @Published var nowPlayingEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(nowPlayingEnabled, forKey: Keys.nowPlayingEnabled)
+            defaults.set(nowPlayingEnabled, forKey: Keys.nowPlayingEnabled)
         }
     }
 
     @Published var logRetentionPreset: LogRetentionPreset {
         didSet {
-            UserDefaults.standard.set(logRetentionPreset.rawValue, forKey: Keys.logRetentionPreset)
+            defaults.set(logRetentionPreset.rawValue, forKey: Keys.logRetentionPreset)
         }
     }
 
     @Published var screenHealthEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(screenHealthEnabled, forKey: Keys.screenHealthEnabled)
+            defaults.set(screenHealthEnabled, forKey: Keys.screenHealthEnabled)
         }
     }
 
     @Published var screenBreakReminderEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(screenBreakReminderEnabled, forKey: Keys.screenBreakReminderEnabled)
+            defaults.set(screenBreakReminderEnabled, forKey: Keys.screenBreakReminderEnabled)
         }
     }
 
     @Published var screenBreakReminderThresholdPreset: ScreenBreakReminderThresholdPreset {
         didSet {
-            UserDefaults.standard.set(
+            defaults.set(
                 screenBreakReminderThresholdPreset.rawValue,
                 forKey: Keys.screenBreakReminderThresholdPreset
             )
@@ -301,6 +303,8 @@ final class AppSettings: ObservableObject {
     let hotKeyDescription = "Option + Command + Space"
 
     init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+
         if defaults.object(forKey: Keys.hoverToExpand) == nil {
             defaults.set(true, forKey: Keys.hoverToExpand)
         }

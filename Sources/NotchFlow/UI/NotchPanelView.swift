@@ -947,7 +947,11 @@ struct NotchPanelView: View {
     private var batterySection: some View {
         moduleCard(width: batteryModuleWidth) {
             moduleHeader("设备电量", systemImage: "battery.100") {
-                if settings.chargeLimitEnabled && chargeLimit.state == .chargingDisabled {
+                if chargeLimit.pendingAction != nil {
+                    Image(systemName: "exclamationmark.bolt.fill")
+                        .font(panelFont(11, weight: .semibold))
+                        .foregroundStyle(.orange)
+                } else if settings.chargeLimitEnabled && chargeLimit.state == .chargingDisabled {
                     Image(systemName: "bolt.slash.fill")
                         .font(panelFont(11, weight: .semibold))
                         .foregroundStyle(.orange)
@@ -978,7 +982,29 @@ struct NotchPanelView: View {
 
             Spacer()
 
-            if settings.chargeLimitEnabled || chargeLimit.state == .chargingDisabled {
+            if let pendingAction = chargeLimit.pendingAction {
+                Button {
+                    chargeLimit.performPendingAction()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(panelFont(10, weight: .semibold))
+                            .foregroundStyle(.orange)
+
+                        Text(pendingAction.buttonTitle)
+                            .font(panelFont(11, weight: .medium))
+                            .foregroundStyle(moduleSecondaryTextColor)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 6)
+                    .frame(height: 20)
+                    .background(moduleTileBackgroundColor, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(chargeLimit.isPerformingAction || !chargeLimit.isHelperInstalled)
+            } else if settings.chargeLimitEnabled || chargeLimit.state == .chargingDisabled {
                 Button {
                     chargeLimit.toggle()
                 } label: {

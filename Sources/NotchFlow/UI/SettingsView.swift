@@ -61,14 +61,32 @@ private enum SettingsTab: Hashable {
 struct SettingsView: View {
     @ObservedObject var model: NotchFlowAppModel
     @ObservedObject private var settings: AppSettings
+    @ObservedObject private var weather: WeatherForecastService
+    @ObservedObject private var battery: BatteryStatusService
+    @ObservedObject private var screenHealth: ScreenHealthService
+    @ObservedObject private var clipboardHistory: ClipboardHistoryService
+    @ObservedObject private var wallpaper: WallpaperRefreshService
+    @ObservedObject private var nowPlaying: NowPlayingService
+    @ObservedObject private var launchAtLogin: LaunchAtLoginManager
+    @ObservedObject private var chargeLimit: ChargeLimitService
     @ObservedObject private var aiTokenUsage: AITokenUsageService
+    @ObservedObject private var scriptShortcuts: ScriptShortcutStore
     @State private var selectedTab: SettingsTab = .general
     @State private var showClearConfirmation = false
 
     init(model: NotchFlowAppModel) {
         _model = ObservedObject(wrappedValue: model)
         _settings = ObservedObject(wrappedValue: model.settings)
+        _weather = ObservedObject(wrappedValue: model.weather)
+        _battery = ObservedObject(wrappedValue: model.battery)
+        _screenHealth = ObservedObject(wrappedValue: model.screenHealth)
+        _clipboardHistory = ObservedObject(wrappedValue: model.clipboardHistory)
+        _wallpaper = ObservedObject(wrappedValue: model.wallpaper)
+        _nowPlaying = ObservedObject(wrappedValue: model.nowPlaying)
+        _launchAtLogin = ObservedObject(wrappedValue: model.launchAtLogin)
+        _chargeLimit = ObservedObject(wrappedValue: model.chargeLimit)
         _aiTokenUsage = ObservedObject(wrappedValue: model.aiTokenUsage)
+        _scriptShortcuts = ObservedObject(wrappedValue: model.scriptShortcuts)
     }
 
     var body: some View {
@@ -356,7 +374,7 @@ struct SettingsView: View {
 
         Section("充电限制") {
             Toggle(
-                "启用充电限制",
+                "启用充电阈值提醒",
                 isOn: Binding(
                     get: { model.settings.chargeLimitEnabled },
                     set: { enabled in
@@ -364,8 +382,20 @@ struct SettingsView: View {
                     }
                 )
             )
+            .disabled(model.chargeLimit.isPerformingAction)
 
             LabeledContent("状态", value: model.chargeLimit.state.displayText)
+
+            if let pendingAction = model.chargeLimit.pendingAction {
+                Button(pendingAction.buttonTitle) {
+                    model.chargeLimit.performPendingAction()
+                }
+                .disabled(model.chargeLimit.isPerformingAction || !model.chargeLimit.isHelperInstalled)
+            }
+
+            if model.chargeLimit.isPerformingAction {
+                ProgressView("正在等待管理员授权")
+            }
 
             if !model.chargeLimit.isHelperInstalled {
                 Button("安装 Helper") {
@@ -379,7 +409,7 @@ struct SettingsView: View {
                 LabeledContent("恢复阈值", value: "\(model.settings.chargeLimitMin)%")
             }
 
-            Text("电量达到 \(model.settings.chargeLimitMax)% 时自动停止充电，低于 \(model.settings.chargeLimitMin)% 时恢复。保护电池寿命。")
+            Text("电量达到 \(model.settings.chargeLimitMax)% 或低于 \(model.settings.chargeLimitMin)% 时会提示。出于安全考虑，暂停或恢复充电只会在你点击按钮并确认管理员授权后执行。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

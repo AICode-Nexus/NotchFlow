@@ -117,14 +117,22 @@ final class SystemScreenHealthClock: ScreenHealthClock {
 protocol ScreenActivityProviding: AnyObject {
     var secondsSinceLastInput: TimeInterval { get }
     var isSessionActive: Bool { get }
+    var onSessionActiveChanged: ((Bool) -> Void)? { get set }
     func start()
     func stop()
 }
 
 @MainActor
 final class SystemScreenActivityProvider: ScreenActivityProviding {
-    private(set) var isSessionActive = true
+    private var systemIsAwake = true
+    private var screensAreAwake = true
+    private var loginSessionIsActive = true
+    var onSessionActiveChanged: ((Bool) -> Void)?
     private var observers: [NSObjectProtocol] = []
+
+    var isSessionActive: Bool {
+        systemIsAwake && screensAreAwake && loginSessionIsActive
+    }
 
     var secondsSinceLastInput: TimeInterval {
         let eventTypes: [CGEventType] = [
@@ -163,8 +171,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = false
+                MainActor.assumeIsolated {
+                    self?.setSystemAwake(false)
                 }
             },
             notificationCenter.addObserver(
@@ -172,8 +180,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = true
+                MainActor.assumeIsolated {
+                    self?.setSystemAwake(true)
                 }
             },
             notificationCenter.addObserver(
@@ -181,8 +189,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = false
+                MainActor.assumeIsolated {
+                    self?.setScreensAwake(false)
                 }
             },
             notificationCenter.addObserver(
@@ -190,8 +198,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = true
+                MainActor.assumeIsolated {
+                    self?.setScreensAwake(true)
                 }
             },
             notificationCenter.addObserver(
@@ -199,8 +207,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = false
+                MainActor.assumeIsolated {
+                    self?.setLoginSessionActive(false)
                 }
             },
             notificationCenter.addObserver(
@@ -208,8 +216,8 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.isSessionActive = true
+                MainActor.assumeIsolated {
+                    self?.setLoginSessionActive(true)
                 }
             },
         ]
@@ -221,6 +229,34 @@ final class SystemScreenActivityProvider: ScreenActivityProviding {
             notificationCenter.removeObserver(observer)
         }
         observers.removeAll()
+    }
+
+    private func setSystemAwake(_ isAwake: Bool) {
+        updateActivityState {
+            systemIsAwake = isAwake
+        }
+    }
+
+    private func setScreensAwake(_ areAwake: Bool) {
+        updateActivityState {
+            screensAreAwake = areAwake
+        }
+    }
+
+    private func setLoginSessionActive(_ isActive: Bool) {
+        updateActivityState {
+            loginSessionIsActive = isActive
+        }
+    }
+
+    private func updateActivityState(_ update: () -> Void) {
+        let wasActive = isSessionActive
+        update()
+        let isActive = isSessionActive
+
+        if isActive != wasActive {
+            onSessionActiveChanged?(isActive)
+        }
     }
 }
 
@@ -249,6 +285,7 @@ final class ScreenHealthService: ObservableObject {
 
     private var refreshTimer: Timer?
     private var cancellables: Set<AnyCancellable> = []
+    private var isStarted = false
     private var lastSampleDate: Date?
     private var todayActiveSeconds: TimeInterval
     private var continuousActiveSeconds: TimeInterval
@@ -292,6 +329,15 @@ final class ScreenHealthService: ObservableObject {
     }
 
     func start() {
+        guard !isStarted else {
+            return
+        }
+
+        isStarted = true
+        lastSampleDate = clock.now
+        activityProvider.onSessionActiveChanged = { [weak self] isActive in
+            self?.handleSessionActiveChanged(isActive)
+        }
         activityProvider.start()
         bindSettings()
         scheduleTimer()
@@ -299,10 +345,17 @@ final class ScreenHealthService: ObservableObject {
     }
 
     func stop() {
+        guard isStarted else {
+            return
+        }
+
+        isStarted = false
         refreshTimer?.invalidate()
         refreshTimer = nil
+        activityProvider.onSessionActiveChanged = nil
         activityProvider.stop()
         cancellables.removeAll()
+        lastSampleDate = nil
         persist()
     }
 
@@ -325,7 +378,7 @@ final class ScreenHealthService: ObservableObject {
 
         let elapsed = lastSampleDate.map { lastSampleDate in
             let rawElapsed = max(0, now.timeIntervalSince(lastSampleDate))
-            return didRollOverDay ? min(rawElapsed, maximumAccrualInterval) : rawElapsed
+            return min(rawElapsed, maximumAccrualInterval)
         } ?? 0
         let inputIdleSeconds = activityProvider.secondsSinceLastInput
         let completedBreak = !activityProvider.isSessionActive || inputIdleSeconds >= breakResetInterval
@@ -349,6 +402,44 @@ final class ScreenHealthService: ObservableObject {
 
     func refreshNow() {
         tick()
+    }
+
+    private func handleSessionActiveChanged(_ isActive: Bool) {
+        let now = clock.now
+        let startOfDay = calendar.startOfDay(for: now)
+        let didRollOverDay = !calendar.isDate(snapshot.day, inSameDayAs: startOfDay)
+        if didRollOverDay {
+            todayActiveSeconds = 0
+        }
+
+        guard settings.screenHealthEnabled else {
+            lastSampleDate = now
+            continuousActiveSeconds = 0
+            updateSnapshot(statusOverride: .normal, at: now)
+            persist()
+            return
+        }
+
+        var statusOverride: ScreenHealthStatus?
+        if !isActive {
+            if activityProvider.secondsSinceLastInput <= activeInputWindow,
+               let lastSampleDate
+            {
+                let rawElapsed = max(0, now.timeIntervalSince(lastSampleDate))
+                let elapsed = min(rawElapsed, maximumAccrualInterval)
+                todayActiveSeconds += elapsed
+                continuousActiveSeconds += elapsed
+            }
+
+            if continuousActiveSeconds > 0 || todayActiveSeconds > 0 {
+                statusOverride = .resting
+            }
+            continuousActiveSeconds = 0
+        }
+
+        lastSampleDate = now
+        updateSnapshot(statusOverride: statusOverride, at: now)
+        persist()
     }
 
     private func bindSettings() {

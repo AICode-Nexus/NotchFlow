@@ -9,16 +9,17 @@ final class RefreshResponsivenessTests: XCTestCase {
             remoteFetcher: EmptyNowPlayingRemoteFetcher(),
             musicFetcher: SlowNowPlayingMusicFetcher(delay: 0.25)
         )
+        defer { service.stop() }
 
         let startedAt = Date()
-        service.refresh()
+        service.start()
         try await Task.sleep(for: .milliseconds(20))
 
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.10)
     }
 
     @MainActor
-    func testWallpaperRefreshDoesNotBlockMainActorDuringSlowApply() async throws {
+    func testWallpaperRefreshDoesNotBlockMainActorDuringSlowScanAndAppliesOnMainThread() async throws {
         let fixture = try TemporaryRefreshFixture()
         let wallpaperURL = fixture.url.appendingPathComponent("wallpaper.png")
         try Data("fake image".utf8).write(to: wallpaperURL)
@@ -26,11 +27,12 @@ final class RefreshResponsivenessTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "NotchFlowTests-\(UUID().uuidString)")!
         defaults.set(fixture.url.path, forKey: "WallpaperRefreshSelectedFolderPath")
         let settings = AppSettings(defaults: defaults)
+        let applier = MainThreadRecordingWallpaperApplier()
         let service = WallpaperRefreshService(
             settings: settings,
             defaults: defaults,
-            fileScanner: StaticWallpaperFileScanner(wallpaperURL: wallpaperURL),
-            wallpaperApplier: SlowWallpaperApplier(delay: 0.25)
+            fileScanner: SlowWallpaperFileScanner(wallpaperURL: wallpaperURL, delay: 0.25),
+            wallpaperApplier: applier
         )
 
         let startedAt = Date()
@@ -38,6 +40,26 @@ final class RefreshResponsivenessTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(20))
 
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.10)
+        XCTAssertNil(applier.wasCalledOnMainThread)
+
+        try await waitUntil { !service.isRefreshing }
+        XCTAssertEqual(applier.wasCalledOnMainThread, true)
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeout: TimeInterval = 1,
+        condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                XCTFail("Timed out waiting for condition")
+                return
+            }
+
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 }
 
@@ -61,19 +83,22 @@ private struct SlowNowPlayingMusicFetcher: NowPlayingMusicFetching {
     }
 }
 
-private struct StaticWallpaperFileScanner: WallpaperFileScanning {
+private struct SlowWallpaperFileScanner: WallpaperFileScanning {
     let wallpaperURL: URL?
+    let delay: TimeInterval
 
     func wallpaperURL(in directoryURL: URL, excluding lastWallpaperURL: URL?) -> URL? {
-        wallpaperURL
+        Thread.sleep(forTimeInterval: delay)
+        return wallpaperURL
     }
 }
 
-private struct SlowWallpaperApplier: WallpaperApplying {
-    let delay: TimeInterval
+@MainActor
+private final class MainThreadRecordingWallpaperApplier: WallpaperApplying {
+    private(set) var wasCalledOnMainThread: Bool?
 
     func applyWallpaper(_ wallpaperURL: URL) throws {
-        Thread.sleep(forTimeInterval: delay)
+        wasCalledOnMainThread = Thread.isMainThread
     }
 }
 

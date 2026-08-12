@@ -7,6 +7,8 @@ enum ChargeLimitState: Equatable {
     case idle
     case monitoring
     case chargingDisabled
+    case actionRequired
+    case performingAction
     case helperNotInstalled
     case unsupported
     case error(String)
@@ -19,6 +21,10 @@ enum ChargeLimitState: Equatable {
             return "监控中，正常充电"
         case .chargingDisabled:
             return "已暂停充电"
+        case .actionRequired:
+            return "需要点击确认并授权"
+        case .performingAction:
+            return "正在等待授权..."
         case .helperNotInstalled:
             return "需要安装 Helper"
         case .unsupported:
@@ -29,11 +35,42 @@ enum ChargeLimitState: Equatable {
     }
 }
 
+enum ChargeLimitPendingAction: Equatable, Sendable {
+    case enableCharging
+    case disableCharging
+
+    var buttonTitle: String {
+        switch self {
+        case .enableCharging:
+            return "授权恢复充电"
+        case .disableCharging:
+            return "授权暂停充电"
+        }
+    }
+
+    fileprivate var command: String {
+        switch self {
+        case .enableCharging:
+            return "enable-charging"
+        case .disableCharging:
+            return "disable-charging"
+        }
+    }
+}
+
+struct ChargeLimitHelperFileSecurity: Equatable {
+    let isRegularFile: Bool
+    let ownerID: UInt32
+    let permissions: UInt16
+}
+
 @MainActor
 final class ChargeLimitService: ObservableObject {
     @Published private(set) var state: ChargeLimitState = .idle
     @Published private(set) var currentPercent: Int = 0
     @Published private(set) var isHelperInstalled: Bool = false
+    @Published private(set) var pendingAction: ChargeLimitPendingAction?
+    @Published private(set) var isPerformingAction = false
 
     private let settings: AppSettings
     private let helperExecutablePath: String
@@ -41,6 +78,7 @@ final class ChargeLimitService: ObservableObject {
     private let currentPercentProvider: () -> Int?
     private var notifyToken: Int32 = 0
     private var isRegistered = false
+    private var actionTask: Task<Void, Never>?
 
     init(
         settings: AppSettings,
@@ -58,14 +96,9 @@ final class ChargeLimitService: ObservableObject {
     func start() {
         isHelperInstalled = helperInstalled()
 
-        guard settings.chargeLimitEnabled else {
-            unregisterPercentNotification()
-            restoreChargingIfNeeded()
-            return
-        }
-
         guard isHelperInstalled else {
             unregisterPercentNotification()
+            pendingAction = nil
             state = helperSourcePath() == nil ? .error("未找到 Helper 可执行文件") : .helperNotInstalled
             return
         }
@@ -78,17 +111,27 @@ final class ChargeLimitService: ObservableObject {
         guard status.supported else {
             unregisterPercentNotification()
             settings.chargeLimitEnabled = false
+            pendingAction = nil
             state = .unsupported
             return
         }
 
+        guard settings.chargeLimitEnabled else {
+            unregisterPercentNotification()
+            updateState(using: status, evaluateThresholds: false)
+            return
+        }
+
+        pendingAction = nil
         state = status.chargingDisabled ? .chargingDisabled : .monitoring
         registerPercentNotification()
     }
 
     func stop() {
         unregisterPercentNotification()
-        restoreChargingIfNeeded()
+        actionTask?.cancel()
+        actionTask = nil
+        isPerformingAction = false
     }
 
     func toggle() {
@@ -96,14 +139,12 @@ final class ChargeLimitService: ObservableObject {
     }
 
     func setEnabled(_ enabled: Bool) {
-        if enabled {
-            settings.chargeLimitEnabled = true
-            start()
+        guard !isPerformingAction else {
             return
         }
 
-        settings.chargeLimitEnabled = false
-        stop()
+        settings.chargeLimitEnabled = enabled
+        start()
     }
 
     func installHelper() {
@@ -114,7 +155,7 @@ final class ChargeLimitService: ObservableObject {
 
         let dest = installedHelperPath()
 
-        guard !FileManager.default.isExecutableFile(atPath: dest) else {
+        guard !helperInstalled() else {
             isHelperInstalled = true
             if state == .helperNotInstalled {
                 start()
@@ -122,9 +163,7 @@ final class ChargeLimitService: ObservableObject {
             return
         }
 
-        let script = """
-        do shell script "mkdir -p '\(shellEscaped("/usr/local/bin"))' && cp '\(shellEscaped(source))' '\(shellEscaped(dest))' && chown root:wheel '\(shellEscaped(dest))' && chmod 4755 '\(shellEscaped(dest))'" with administrator privileges
-        """
+        let script = Self.helperInstallationScript(source: source, destination: dest)
         let output = runAppleScript(script)
 
         isHelperInstalled = helperInstalled()
@@ -196,54 +235,92 @@ final class ChargeLimitService: ObservableObject {
     func reconcile(percent: Int) {
         currentPercent = min(max(percent, 0), 100)
 
-        guard settings.chargeLimitEnabled else {
-            restoreChargingIfNeeded()
-            return
-        }
-
         guard let status = helperStatus() else {
             return
         }
 
         guard status.supported else {
             settings.chargeLimitEnabled = false
+            pendingAction = nil
             state = .unsupported
             return
         }
 
-        let maxCharge = settings.chargeLimitMax
-        let minCharge = settings.chargeLimitMin
+        updateState(using: status, evaluateThresholds: settings.chargeLimitEnabled)
+    }
 
-        if currentPercent >= maxCharge && !status.chargingDisabled {
-            disableCharging()
-        } else if currentPercent < minCharge && status.chargingDisabled {
-            enableCharging()
-        } else {
-            state = status.chargingDisabled ? .chargingDisabled : .monitoring
+    func performPendingAction() {
+        guard !isPerformingAction, let action = pendingAction else {
+            return
+        }
+
+        guard helperInstalled() else {
+            isHelperInstalled = false
+            state = .helperNotInstalled
+            return
+        }
+
+        isPerformingAction = true
+        state = .performingAction
+
+        if let helperCommandRunner {
+            finishPendingAction(action, output: helperCommandRunner(action.command))
+            return
+        }
+
+        let script = Self.privilegedHelperCommandScript(
+            path: installedHelperPath(),
+            command: action.command
+        )
+        actionTask?.cancel()
+        actionTask = Task { [weak self] in
+            let output = await Task.detached(priority: .userInitiated) {
+                Self.executeAppleScript(script)
+            }.value
+
+            guard !Task.isCancelled, let self else {
+                return
+            }
+
+            self.finishPendingAction(action, output: output)
         }
     }
 
-    private func disableCharging() {
-        let output = runHelperCommand("disable-charging")
-        if !output.contains("error") {
-            state = .chargingDisabled
-        } else {
-            state = .error("禁止充电失败")
+    private func updateState(using status: HelperStatus, evaluateThresholds: Bool) {
+        if !settings.chargeLimitEnabled {
+            pendingAction = status.chargingDisabled ? .enableCharging : nil
+            state = pendingAction == nil ? .idle : .actionRequired
+            return
         }
+
+        if evaluateThresholds,
+           currentPercent >= settings.chargeLimitMax,
+           !status.chargingDisabled
+        {
+            pendingAction = .disableCharging
+            state = .actionRequired
+            return
+        }
+
+        if evaluateThresholds,
+           currentPercent < settings.chargeLimitMin,
+           status.chargingDisabled
+        {
+            pendingAction = .enableCharging
+            state = .actionRequired
+            return
+        }
+
+        pendingAction = nil
+        state = status.chargingDisabled ? .chargingDisabled : .monitoring
     }
 
-    private func enableCharging() {
-        let output = runHelperCommand("enable-charging")
-        if !output.contains("error") {
-            state = .monitoring
-        } else {
-            state = .error("恢复充电失败")
-        }
-    }
+    private func finishPendingAction(_ action: ChargeLimitPendingAction, output: String) {
+        actionTask = nil
+        isPerformingAction = false
 
-    private func restoreChargingIfNeeded() {
-        guard isHelperInstalled else {
-            state = .idle
+        guard Self.helperCommandSucceeded(output) else {
+            state = .error("授权操作已取消或执行失败")
             return
         }
 
@@ -251,17 +328,23 @@ final class ChargeLimitService: ObservableObject {
             return
         }
 
-        guard status.supported, status.chargingDisabled else {
-            state = .idle
+        let reachedExpectedState = switch action {
+        case .enableCharging:
+            !status.chargingDisabled
+        case .disableCharging:
+            status.chargingDisabled
+        }
+
+        guard reachedExpectedState else {
+            state = .error("执行后充电状态未改变")
             return
         }
 
-        let output = runHelperCommand("enable-charging")
-        state = output.hasPrefix("error:") ? .error("恢复充电失败") : .idle
+        updateState(using: status, evaluateThresholds: settings.chargeLimitEnabled)
     }
 
     private func helperStatus() -> HelperStatus? {
-        let output = runHelperCommand("status")
+        let output = runHelperStatusCommand()
         if output.hasPrefix("error:") {
             state = .error("无法检测设备支持状态")
             return nil
@@ -277,19 +360,19 @@ final class ChargeLimitService: ObservableObject {
         return status
     }
 
-    private func runHelperCommand(_ command: String) -> String {
+    private func runHelperStatusCommand() -> String {
         if let helperCommandRunner {
-            return helperCommandRunner(command)
+            return helperCommandRunner("status")
         }
 
         let path = installedHelperPath()
-        guard FileManager.default.isExecutableFile(atPath: path) else {
+        guard helperInstalled() else {
             return "error: helper not installed"
         }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = [command]
+        process.arguments = ["status"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
@@ -299,7 +382,7 @@ final class ChargeLimitService: ObservableObject {
         } catch {
             return "error: \(error.localizedDescription)"
         }
-        if process.terminationStatus != 0 {
+        guard process.terminationStatus == 0 else {
             return "error: exit code \(process.terminationStatus)"
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -308,21 +391,69 @@ final class ChargeLimitService: ObservableObject {
 
     @discardableResult
     private func runAppleScript(_ source: String) -> String {
+        Self.executeAppleScript(source)
+    }
+
+    nonisolated private static func executeAppleScript(_ source: String) -> String {
         var error: NSDictionary?
-        let script = NSAppleScript(source: source)
-        let result = script?.executeAndReturnError(&error)
+        guard let script = NSAppleScript(source: source) else {
+            return "error: 无法创建 AppleScript"
+        }
+
+        let result = script.executeAndReturnError(&error)
         if let error = error {
             let msg = error[NSAppleScript.errorMessage] as? String ?? "未知错误"
-            if !msg.contains("User canceled") {
-                return "error: \(msg)"
-            }
-            return ""
+            return Self.appleScriptErrorOutput(message: msg)
         }
-        return result?.stringValue ?? ""
+
+        guard let output = result.stringValue else {
+            return "error: AppleScript 未返回执行结果"
+        }
+        return output
     }
 
     private func helperInstalled() -> Bool {
-        FileManager.default.isExecutableFile(atPath: installedHelperPath())
+        let path = installedHelperPath()
+        guard FileManager.default.isExecutableFile(atPath: path) else {
+            return false
+        }
+
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: path)
+            guard let fileType = attributes[.type] as? FileAttributeType,
+                  let ownerID = (attributes[.ownerAccountID] as? NSNumber)?.uint32Value,
+                  let permissions = (attributes[.posixPermissions] as? NSNumber)?.uint16Value
+            else {
+                return false
+            }
+
+            let hasSecureMetadata = Self.isSecureInstalledHelper(
+                ChargeLimitHelperFileSecurity(
+                    isRegularFile: fileType == .typeRegular,
+                    ownerID: ownerID,
+                    permissions: permissions
+                )
+            )
+            guard hasSecureMetadata else {
+                return false
+            }
+
+            // Tests inject their own command runner and never execute the file.
+            // Production must only trust the exact helper shipped with this app.
+            if helperCommandRunner != nil {
+                return true
+            }
+
+            guard let trustedSourcePath = helperSourcePath() else {
+                return false
+            }
+            return Self.helperMatchesTrustedSource(
+                installedPath: path,
+                trustedSourcePath: trustedSourcePath
+            )
+        } catch {
+            return false
+        }
     }
 
     private func installedHelperPath() -> String {
@@ -360,8 +491,66 @@ final class ChargeLimitService: ObservableObject {
         return Array(NSOrderedSet(array: candidates)) as? [String] ?? candidates
     }
 
-    private func shellEscaped(_ path: String) -> String {
+    nonisolated static func helperInstallationScript(source: String, destination: String) -> String {
+        let source = shellEscapedPath(source)
+        let destinationDirectory = shellEscapedPath(
+            URL(fileURLWithPath: destination).deletingLastPathComponent().path
+        )
+        let destination = shellEscapedPath(destination)
+        let command = "mkdir -p '\(destinationDirectory)' && rm -f '\(destination)' && cp '\(source)' '\(destination)' && chown root:wheel '\(destination)' && chmod 0755 '\(destination)'"
+        return "do shell script \"\(appleScriptString(command))\" with administrator privileges"
+    }
+
+    nonisolated static let helperCommandSuccessMarker = "__NOTCHFLOW_SMC_HELPER_OK__"
+
+    nonisolated static func privilegedHelperCommandScript(path: String, command: String) -> String {
+        let path = shellEscapedPath(path)
+        let command = shellEscapedPath(command)
+        let marker = shellEscapedPath(helperCommandSuccessMarker)
+        let shellCommand = "'\(path)' '\(command)' && printf '\\n%s\\n' '\(marker)'"
+        return "do shell script \"\(appleScriptString(shellCommand))\" with administrator privileges"
+    }
+
+    nonisolated static func helperCommandSucceeded(_ output: String) -> Bool {
+        output
+            .split(whereSeparator: \Character.isNewline)
+            .last == Substring(helperCommandSuccessMarker)
+    }
+
+    nonisolated static func isSecureInstalledHelper(_ file: ChargeLimitHelperFileSecurity) -> Bool {
+        guard file.isRegularFile, file.ownerID == 0 else {
+            return false
+        }
+
+        let permissions = file.permissions & 0o7777
+        let hasOwnerOrGroupSetID = permissions & 0o6000 != 0
+        let isWritableByGroupOrWorld = permissions & 0o0022 != 0
+        let isExecutable = permissions & 0o0111 != 0
+        return !hasOwnerOrGroupSetID && !isWritableByGroupOrWorld && isExecutable
+    }
+
+    nonisolated static func helperMatchesTrustedSource(
+        installedPath: String,
+        trustedSourcePath: String
+    ) -> Bool {
+        FileManager.default.contentsEqual(
+            atPath: installedPath,
+            andPath: trustedSourcePath
+        )
+    }
+
+    nonisolated static func appleScriptErrorOutput(message: String) -> String {
+        "error: \(message)"
+    }
+
+    nonisolated private static func shellEscapedPath(_ path: String) -> String {
         path.replacingOccurrences(of: "'", with: "'\"'\"'")
+    }
+
+    nonisolated private static func appleScriptString(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }
 

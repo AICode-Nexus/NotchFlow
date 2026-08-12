@@ -1,12 +1,31 @@
 import AppKit
 import Foundation
 
-struct LocalInstalledApp: Identifiable {
+struct LocalInstalledApp: Identifiable, Sendable {
     let id: String
     let displayName: String
     let bundleIdentifier: String?
     let url: URL
-    let iconImage: NSImage
+
+    @MainActor
+    var iconImage: NSImage {
+        let cacheKey = url as NSURL
+        if let cachedImage = Self.iconCache.object(forKey: cacheKey) {
+            return cachedImage
+        }
+
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        image.size = NSSize(width: 64, height: 64)
+        Self.iconCache.setObject(image, forKey: cacheKey)
+        return image
+    }
+
+    @MainActor
+    private static let iconCache = NSCache<NSURL, NSImage>()
+}
+
+protocol LocalApplicationScanning: Sendable {
+    func discoverApplications() -> [LocalInstalledApp]
 }
 
 @MainActor
@@ -22,10 +41,14 @@ final class LocalAppSearchService: ObservableObject {
 
     private var hasStarted = false
     private var allApps: [LocalInstalledApp] = []
-    private let fileManager: FileManager
+    private let scanner: any LocalApplicationScanning
+    private var indexingTask: Task<Void, Never>?
 
-    init(fileManager: FileManager = .default) {
-        self.fileManager = fileManager
+    init(
+        fileManager: FileManager = .default,
+        scanner: (any LocalApplicationScanning)? = nil
+    ) {
+        self.scanner = scanner ?? FileSystemLocalApplicationScanner(fileManager: fileManager)
     }
 
     var visibleResults: [LocalInstalledApp] {
@@ -40,12 +63,30 @@ final class LocalAppSearchService: ObservableObject {
         hasStarted = true
         isIndexing = true
 
-        Task { @MainActor in
-            await Task.yield()
-            allApps = Self.discoverApplications(fileManager: fileManager)
-            isIndexing = false
-            updateResults()
+        indexingTask = Task.detached(priority: .utility) { [weak self, scanner] in
+            let discoveredApps = scanner.discoverApplications()
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run { [weak self] in
+                guard let self, !Task.isCancelled else {
+                    return
+                }
+
+                self.allApps = discoveredApps
+                self.isIndexing = false
+                self.indexingTask = nil
+                self.updateResults()
+            }
         }
+    }
+
+    func stop() {
+        indexingTask?.cancel()
+        indexingTask = nil
+        hasStarted = false
+        isIndexing = false
     }
 
     func clearQuery() {
@@ -91,78 +132,6 @@ final class LocalAppSearchService: ObservableObject {
             .map(\.0)
     }
 
-    private static func discoverApplications(fileManager: FileManager) -> [LocalInstalledApp] {
-        let rootURLs = applicationSearchRoots(fileManager: fileManager)
-        var seenPaths = Set<String>()
-        var apps: [LocalInstalledApp] = []
-
-        for rootURL in rootURLs where fileManager.fileExists(atPath: rootURL.path) {
-            guard let enumerator = fileManager.enumerator(
-                at: rootURL,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            ) else {
-                continue
-            }
-
-            for case let fileURL as URL in enumerator {
-                guard fileURL.pathExtension.lowercased() == "app" else {
-                    continue
-                }
-
-                let standardizedURL = fileURL.standardizedFileURL
-                guard seenPaths.insert(standardizedURL.path).inserted else {
-                    continue
-                }
-
-                apps.append(installedApp(at: standardizedURL))
-            }
-        }
-
-        return apps.sorted { lhs, rhs in
-            lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
-    }
-
-    private static func applicationSearchRoots(fileManager: FileManager) -> [URL] {
-        var roots = [
-            URL(fileURLWithPath: "/Applications", isDirectory: true),
-            URL(fileURLWithPath: "/System/Applications", isDirectory: true),
-            URL(fileURLWithPath: "/System/Applications/Utilities", isDirectory: true),
-        ]
-
-        if let userApplicationsURL = fileManager.urls(for: .applicationDirectory, in: .userDomainMask).first {
-            roots.append(userApplicationsURL)
-        }
-
-        return roots
-    }
-
-    private static func installedApp(at url: URL) -> LocalInstalledApp {
-        let bundle = Bundle(url: url)
-        let displayName = bundleDisplayName(bundle: bundle)
-            ?? url.deletingPathExtension().lastPathComponent
-        let iconImage = NSWorkspace.shared.icon(forFile: url.path)
-        iconImage.size = NSSize(width: 64, height: 64)
-
-        return LocalInstalledApp(
-            id: url.path,
-            displayName: displayName,
-            bundleIdentifier: bundle?.bundleIdentifier,
-            url: url,
-            iconImage: iconImage
-        )
-    }
-
-    private static func bundleDisplayName(bundle: Bundle?) -> String? {
-        guard let infoDictionary = bundle?.localizedInfoDictionary ?? bundle?.infoDictionary else {
-            return nil
-        }
-
-        return (infoDictionary["CFBundleDisplayName"] as? String)
-            ?? (infoDictionary["CFBundleName"] as? String)
-    }
-
     private static func normalized(_ value: String) -> String {
         value
             .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
@@ -199,5 +168,90 @@ final class LocalAppSearchService: ObservableObject {
         }
 
         return nil
+    }
+}
+
+private final class FileSystemLocalApplicationScanner: LocalApplicationScanning, @unchecked Sendable {
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager) {
+        self.fileManager = fileManager
+    }
+
+    func discoverApplications() -> [LocalInstalledApp] {
+        let rootURLs = Self.applicationSearchRoots(fileManager: fileManager)
+        var seenPaths = Set<String>()
+        var apps: [LocalInstalledApp] = []
+
+        for rootURL in rootURLs where fileManager.fileExists(atPath: rootURL.path) {
+            guard !Task.isCancelled else {
+                return []
+            }
+
+            guard let enumerator = fileManager.enumerator(
+                at: rootURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) else {
+                continue
+            }
+
+            for case let fileURL as URL in enumerator {
+                guard !Task.isCancelled else {
+                    return []
+                }
+
+                guard fileURL.pathExtension.lowercased() == "app" else {
+                    continue
+                }
+
+                let standardizedURL = fileURL.standardizedFileURL
+                guard seenPaths.insert(standardizedURL.path).inserted else {
+                    continue
+                }
+
+                apps.append(Self.installedApp(at: standardizedURL))
+            }
+        }
+
+        return apps.sorted { lhs, rhs in
+            lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    private static func applicationSearchRoots(fileManager: FileManager) -> [URL] {
+        var roots = [
+            URL(fileURLWithPath: "/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Applications/Utilities", isDirectory: true),
+        ]
+
+        if let userApplicationsURL = fileManager.urls(for: .applicationDirectory, in: .userDomainMask).first {
+            roots.append(userApplicationsURL)
+        }
+
+        return roots
+    }
+
+    private static func installedApp(at url: URL) -> LocalInstalledApp {
+        let bundle = Bundle(url: url)
+        let displayName = bundleDisplayName(bundle: bundle)
+            ?? url.deletingPathExtension().lastPathComponent
+
+        return LocalInstalledApp(
+            id: url.path,
+            displayName: displayName,
+            bundleIdentifier: bundle?.bundleIdentifier,
+            url: url
+        )
+    }
+
+    private static func bundleDisplayName(bundle: Bundle?) -> String? {
+        guard let infoDictionary = bundle?.localizedInfoDictionary ?? bundle?.infoDictionary else {
+            return nil
+        }
+
+        return (infoDictionary["CFBundleDisplayName"] as? String)
+            ?? (infoDictionary["CFBundleName"] as? String)
     }
 }

@@ -156,14 +156,14 @@ final class NotchPanelController: ObservableObject {
     private func expand(animated: Bool) {
         guard !isExpanded else {
             applyCurrentFrame(animated: animated, screenSelection: .panel)
-            nowPlaying.refresh()
+            refreshNowPlayingIfEnabled()
             updateNowPlayingCadence()
             return
         }
 
         isExpanded = true
         applyCurrentFrame(animated: animated, screenSelection: .panel)
-        nowPlaying.refresh()
+        refreshNowPlayingIfEnabled()
         weather.refreshIfNeeded()
         battery.refreshIfNeeded(maximumAge: 60)
         aiTokenUsage.refreshIfNeeded()
@@ -289,6 +289,14 @@ final class NotchPanelController: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] _ in
                 self?.scheduleLayoutRefresh(syncVisibility: true, animateFrame: true)
+            }
+            .store(in: &cancellables)
+
+        settings.$nowPlayingEnabled
+            .removeDuplicates()
+            .sink { [weak self] isEnabled in
+                self?.scheduleLayoutRefresh(syncVisibility: true, animateFrame: true)
+                self?.updateNowPlayingCadence(isEnabled: isEnabled)
             }
             .store(in: &cancellables)
 
@@ -534,7 +542,7 @@ final class NotchPanelController: ObservableObject {
             || !scriptShortcuts.shortcuts.isEmpty
         var sectionHeights: [CGFloat] = []
 
-        if nowPlaying.snapshot.hasContent {
+        if settings.nowPlayingEnabled, nowPlaying.snapshot.hasContent {
             sectionHeights.append(metrics.nowPlayingSectionHeight)
         }
 
@@ -674,7 +682,23 @@ final class NotchPanelController: ObservableObject {
     }
 
     private func updateNowPlayingCadence() {
+        updateNowPlayingCadence(isEnabled: settings.nowPlayingEnabled)
+    }
+
+    private func updateNowPlayingCadence(isEnabled: Bool) {
+        guard isEnabled else {
+            return
+        }
+
         nowPlaying.setInteractiveRefresh(isExpanded || isPinned)
+    }
+
+    private func refreshNowPlayingIfEnabled() {
+        guard settings.nowPlayingEnabled else {
+            return
+        }
+
+        nowPlaying.refresh()
     }
 }
 

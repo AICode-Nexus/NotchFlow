@@ -37,6 +37,7 @@ final class NowPlayingService: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var pollingInterval: TimeInterval = 2.0
+    private var isRunning = false
 
     init(
         remoteFetcher: any NowPlayingRemoteFetching = MediaRemoteNowPlayingFetcher(),
@@ -47,21 +48,32 @@ final class NowPlayingService: ObservableObject {
     }
 
     func start() {
+        guard !isRunning else {
+            return
+        }
+
+        isRunning = true
         installObservers()
         scheduleTimer()
         refresh()
     }
 
     func stop() {
+        isRunning = false
         timer?.invalidate()
         timer = nil
         refreshTask?.cancel()
+        refreshTask = nil
 
         let notificationCenter = NSWorkspace.shared.notificationCenter
         for observer in observers {
             notificationCenter.removeObserver(observer)
         }
         observers.removeAll()
+
+        snapshot = .empty
+        sourceLabel = "Idle"
+        isRefreshing = false
     }
 
     func setInteractiveRefresh(_ isInteractive: Bool) {
@@ -71,11 +83,16 @@ final class NowPlayingService: ObservableObject {
         }
 
         pollingInterval = nextInterval
-        scheduleTimer()
+        if isRunning {
+            scheduleTimer()
+        }
     }
 
     func refresh() {
-        refreshTask?.cancel()
+        guard isRunning, refreshTask == nil else {
+            return
+        }
+
         isRefreshing = true
 
         refreshTask = Task { [weak self] in
@@ -83,7 +100,12 @@ final class NowPlayingService: ObservableObject {
                 return
             }
 
-            if let remotePayload = await remoteFetcher.fetchNowPlaying() {
+            let remotePayload = await remoteFetcher.fetchNowPlaying()
+            guard !Task.isCancelled, self.isRunning else {
+                return
+            }
+
+            if let remotePayload {
                 snapshot = NowPlayingSnapshot(
                     title: remotePayload.title,
                     artist: remotePayload.artist,
@@ -94,6 +116,7 @@ final class NowPlayingService: ObservableObject {
                 )
                 sourceLabel = "System"
                 isRefreshing = false
+                self.finishRefresh()
                 return
             }
 
@@ -101,7 +124,7 @@ final class NowPlayingService: ObservableObject {
                 musicFetcher.fetchNowPlaying()
             }.value
 
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, self.isRunning else {
                 return
             }
 
@@ -116,13 +139,19 @@ final class NowPlayingService: ObservableObject {
                 )
                 sourceLabel = "Music"
                 isRefreshing = false
+                self.finishRefresh()
                 return
             }
 
             snapshot = .empty
             sourceLabel = "Idle"
             isRefreshing = false
+            self.finishRefresh()
         }
+    }
+
+    private func finishRefresh() {
+        refreshTask = nil
     }
 
     func togglePlayPause() {
@@ -167,6 +196,11 @@ final class NowPlayingService: ObservableObject {
 
     private func scheduleTimer() {
         timer?.invalidate()
+        guard isRunning else {
+            timer = nil
+            return
+        }
+
         timer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.refresh()

@@ -30,8 +30,9 @@ final class LaunchAtLoginManager: ObservableObject {
 
             await refreshStatus()
         } catch {
-            statusMessage = "Unavailable in the current launch mode"
-            await refreshStatus()
+            let status = SMAppService.mainApp.status
+            isEnabled = status == .enabled
+            statusMessage = "无法更新开机自启：\(error.localizedDescription)"
         }
     }
 
