@@ -3,6 +3,39 @@ import Foundation
 import XCTest
 
 final class AITokenStorageManagementTests: XCTestCase {
+    @MainActor
+    func testSettingsViewDirectlyObservesRetentionAndUsageState() {
+        let view = SettingsView(model: .shared)
+        let observedProperties = Set(Mirror(reflecting: view).children.compactMap(\.label))
+
+        XCTAssertTrue(observedProperties.contains("_settings"))
+        XCTAssertTrue(observedProperties.contains("_aiTokenUsage"))
+    }
+
+    @MainActor
+    func testRetentionChangeRecalculatesPreviewUsingNewPreset() async throws {
+        let defaults = UserDefaults(suiteName: "NotchFlowTests-\(UUID().uuidString)")!
+        defaults.set(false, forKey: "AITokenUsageEnabled")
+        defaults.set(LogRetentionPreset.thirtyDays.rawValue, forKey: "LogRetentionPreset")
+        let settings = AppSettings(defaults: defaults)
+        let storage = RetentionRecordingStorageManager()
+        let service = AITokenUsageService(
+            settings: settings,
+            readers: [EmptyAITokenUsageReader()],
+            storageManager: storage,
+            calendar: utcCalendar
+        )
+        defer { service.stop() }
+
+        service.start()
+        try await waitUntil { storage.retentionDays.last == 30 }
+
+        settings.logRetentionPreset = .fourteenDays
+        try await waitUntil { storage.retentionDays.last == 14 }
+
+        XCTAssertEqual(storage.retentionDays.last, 14)
+    }
+
     func testSnapshotCountsCleanableFilesAndPreviewsExpiredFiles() throws {
         let fixture = try TemporaryStorageFixture()
         let codex = try fixture.makeDirectory("codex")
@@ -220,6 +253,26 @@ private final class RecordingAITokenUsageStorageManager: AITokenUsageStorageMana
             freedBytes: 11,
             failedFileCount: 2
         )
+    }
+}
+
+private final class RetentionRecordingStorageManager: AITokenUsageStorageManaging, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedRetentionDays: [Int] = []
+
+    var retentionDays: [Int] {
+        lock.withLock { recordedRetentionDays }
+    }
+
+    func snapshot(retentionDays: Int, now: Date, calendar: Calendar) -> AITokenUsageStorageSnapshot {
+        lock.withLock {
+            recordedRetentionDays.append(retentionDays)
+        }
+        return .empty
+    }
+
+    func clearExpiredLogs(retentionDays: Int, now: Date, calendar: Calendar) -> AITokenUsageCleanupResult {
+        AITokenUsageCleanupResult(deletedFileCount: 0, freedBytes: 0, failedFileCount: 0)
     }
 }
 

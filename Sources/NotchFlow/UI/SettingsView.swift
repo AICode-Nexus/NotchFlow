@@ -60,8 +60,16 @@ private enum SettingsTab: Hashable {
 
 struct SettingsView: View {
     @ObservedObject var model: NotchFlowAppModel
+    @ObservedObject private var settings: AppSettings
+    @ObservedObject private var aiTokenUsage: AITokenUsageService
     @State private var selectedTab: SettingsTab = .general
     @State private var showClearConfirmation = false
+
+    init(model: NotchFlowAppModel) {
+        _model = ObservedObject(wrappedValue: model)
+        _settings = ObservedObject(wrappedValue: model.settings)
+        _aiTokenUsage = ObservedObject(wrappedValue: model.aiTokenUsage)
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -172,15 +180,15 @@ struct SettingsView: View {
     }
 
     private var aiUsageTodayLabel: String {
-        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.todayTotalTokens)) token"
+        "\(AITokenUsageFormatter.tokenCount(aiTokenUsage.todayTotalTokens)) token"
     }
 
     private var aiUsageSevenDayLabel: String {
-        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.sevenDayTotalTokens)) token"
+        "\(AITokenUsageFormatter.tokenCount(aiTokenUsage.sevenDayTotalTokens)) token"
     }
 
     private var aiUsageThirtyDayLabel: String {
-        "\(AITokenUsageFormatter.tokenCount(model.aiTokenUsage.thirtyDayTotalTokens)) token"
+        "\(AITokenUsageFormatter.tokenCount(aiTokenUsage.thirtyDayTotalTokens)) token"
     }
 
     private var screenHealthTodayLabel: String {
@@ -544,37 +552,31 @@ struct SettingsView: View {
     @ViewBuilder
     private var aiUsageSections: some View {
         Section("本机 AI token") {
-            Toggle(
-                "显示 AI 用量",
-                isOn: Binding(
-                    get: { model.settings.aiTokenUsageEnabled },
-                    set: { model.settings.aiTokenUsageEnabled = $0 }
-                )
-            )
+            Toggle("显示 AI 用量", isOn: $settings.aiTokenUsageEnabled)
 
             Text("开启后仅在本机读取 Codex、Claude 等工具日志中的 usage/token 元数据，不读取对话正文，不上传网络。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            LabeledContent("状态", value: model.aiTokenUsage.statusMessage)
-            LabeledContent("最近刷新", value: model.aiTokenUsage.lastRefreshText)
+            LabeledContent("状态", value: aiTokenUsage.statusMessage)
+            LabeledContent("最近刷新", value: aiTokenUsage.lastRefreshText)
             LabeledContent("今日", value: aiUsageTodayLabel)
             LabeledContent("近 7 天", value: aiUsageSevenDayLabel)
             LabeledContent("近 30 天", value: aiUsageThirtyDayLabel)
 
             Button("立即刷新 AI 用量") {
-                model.aiTokenUsage.refresh()
+                aiTokenUsage.refresh()
             }
-            .disabled(!model.settings.aiTokenUsageEnabled || model.aiTokenUsage.isRefreshing)
+            .disabled(!settings.aiTokenUsageEnabled || aiTokenUsage.isRefreshing)
         }
 
         Section("数据源") {
-            if model.aiTokenUsage.summary.sourceStatuses.isEmpty {
-                Text(model.settings.aiTokenUsageEnabled ? "刷新后显示数据源状态" : "开启后检测本机 AI 工具记录")
+            if aiTokenUsage.summary.sourceStatuses.isEmpty {
+                Text(settings.aiTokenUsageEnabled ? "刷新后显示数据源状态" : "开启后检测本机 AI 工具记录")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(model.aiTokenUsage.summary.sourceStatuses) { status in
+                ForEach(aiTokenUsage.summary.sourceStatuses) { status in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(status.displayName)
@@ -587,7 +589,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        if let dirs = model.aiTokenUsage.sourceDirectories[status.id], !dirs.isEmpty {
+                        if let dirs = aiTokenUsage.sourceDirectories[status.id], !dirs.isEmpty {
                             ForEach(dirs) { dir in
                                 HStack(spacing: 4) {
                                     Text(dir.displayPath)
@@ -610,15 +612,12 @@ struct SettingsView: View {
         }
 
         Section("存储管理") {
-            LabeledContent("日志占用", value: model.aiTokenUsage.diskUsageText)
-            LabeledContent("预计可清理", value: model.aiTokenUsage.cleanupPreviewText)
+            LabeledContent("日志占用", value: aiTokenUsage.diskUsageText)
+            LabeledContent("预计可清理", value: aiTokenUsage.cleanupPreviewText)
 
             Picker(
                 "保留天数",
-                selection: Binding(
-                    get: { model.settings.logRetentionPreset },
-                    set: { model.settings.logRetentionPreset = $0 }
-                )
+                selection: $settings.logRetentionPreset
             ) {
                 ForEach(LogRetentionPreset.allCases) { preset in
                     Text(preset.title).tag(preset)
@@ -629,29 +628,29 @@ struct SettingsView: View {
                 showClearConfirmation = true
             }
             .disabled(
-                model.aiTokenUsage.isClearing
-                    || model.aiTokenUsage.isCalculatingStorage
-                    || model.aiTokenUsage.cleanupPreview.fileCount == 0
+                aiTokenUsage.isClearing
+                    || aiTokenUsage.isCalculatingStorage
+                    || aiTokenUsage.cleanupPreview.fileCount == 0
             )
             .confirmationDialog(
                 "确认清除",
                 isPresented: $showClearConfirmation
             ) {
-                Button("清除超过 \(model.settings.logRetentionPreset.title) 的日志", role: .destructive) {
-                    model.aiTokenUsage.clearOldLogs(retentionDays: model.settings.logRetentionPreset.rawValue)
+                Button("清除超过 \(settings.logRetentionPreset.title) 的日志", role: .destructive) {
+                    aiTokenUsage.clearOldLogs(retentionDays: settings.logRetentionPreset.rawValue)
                 }
                 Button("取消", role: .cancel) {}
             } message: {
-                Text("预计永久删除 \(model.aiTokenUsage.cleanupPreviewText)。这些是 Codex/Claude 原始会话日志（.jsonl 和 .response.json），会影响历史用量统计和旧会话恢复，且无法撤销。")
+                Text("预计永久删除 \(aiTokenUsage.cleanupPreviewText)。这些是 Codex/Claude 原始会话日志（.jsonl 和 .response.json），会影响历史用量统计和旧会话恢复，且无法撤销。")
             }
 
-            if model.settings.logRetentionPreset.rawValue < 30 {
+            if settings.logRetentionPreset.rawValue < 30 {
                 Text("当前保留时间少于 30 天，清理后“近 30 天”用量将不完整。")
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
 
-            if model.aiTokenUsage.isClearing {
+            if aiTokenUsage.isClearing {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
@@ -661,7 +660,7 @@ struct SettingsView: View {
                 }
             }
 
-            if let result = model.aiTokenUsage.lastClearResult {
+            if let result = aiTokenUsage.lastClearResult {
                 Text(result)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

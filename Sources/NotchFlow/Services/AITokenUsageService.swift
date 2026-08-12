@@ -1436,8 +1436,8 @@ final class AITokenUsageService: ObservableObject {
         settings.$logRetentionPreset
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] _ in
-                self?.calculateDiskUsage()
+            .sink { [weak self] preset in
+                self?.calculateDiskUsage(retentionDays: preset.rawValue)
             }
             .store(in: &cancellables)
     }
@@ -1535,10 +1535,13 @@ final class AITokenUsageService: ObservableObject {
     }
 
     func calculateDiskUsage() {
+        calculateDiskUsage(retentionDays: settings.logRetentionPreset.rawValue)
+    }
+
+    private func calculateDiskUsage(retentionDays: Int) {
         storageTask?.cancel()
         isCalculatingStorage = true
 
-        let retentionDays = settings.logRetentionPreset.rawValue
         let now = nowProvider()
         let calendar = calendar
         let storageManager = storageManager
