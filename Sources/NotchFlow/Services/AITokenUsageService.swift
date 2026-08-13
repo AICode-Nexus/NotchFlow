@@ -3,6 +3,7 @@ import Foundation
 
 enum AITokenUsageSourceID: String, CaseIterable, Identifiable, Codable, Sendable {
     case codex
+    case glm
     case claude
     case cursor
     case windsurf
@@ -20,6 +21,8 @@ enum AITokenUsageSourceID: String, CaseIterable, Identifiable, Codable, Sendable
         switch self {
         case .codex:
             return "Codex"
+        case .glm:
+            return "GLM"
         case .claude:
             return "Claude"
         case .cursor:
@@ -425,6 +428,23 @@ struct AITokenUsageSummary: Equatable, Sendable {
                 AITokenUsageSourceSummary(id: sourceID, breakdown: breakdown)
             }
             .sorted { $0.breakdown.totalTokens > $1.breakdown.totalTokens }
+    }
+
+    func notchSourceSummaries(
+        on date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [AITokenUsageSourceSummary] {
+        let startOfDay = calendar.startOfDay(for: date)
+        let breakdowns = daySummaries
+            .first(where: { calendar.isDate($0.day, inSameDayAs: startOfDay) })?
+            .sourceBreakdowns ?? [:]
+
+        return [AITokenUsageSourceID.codex, .glm].map { sourceID in
+            AITokenUsageSourceSummary(
+                id: sourceID,
+                breakdown: breakdowns[sourceID] ?? .zero
+            )
+        }
     }
 }
 
@@ -1458,6 +1478,11 @@ final class AITokenUsageService: ObservableObject {
     static func defaultReaders(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> [AITokenUsageSourceReading] {
         [
             CodexTokenUsageSourceReader(rootDirectories: CodexTokenUsageSourceReader.defaultRootDirectories(homeDirectory: homeDirectory)),
+            ZCodeGLMTokenUsageSourceReader(
+                databaseURL: ZCodeGLMTokenUsageSourceReader.defaultDatabaseURL(
+                    homeDirectory: homeDirectory
+                )
+            ),
             ClaudeTokenUsageSourceReader(
                 projectDirectories: ClaudeTokenUsageSourceReader.defaultProjectDirectories(homeDirectory: homeDirectory),
                 captureDirectories: ClaudeTokenUsageSourceReader.defaultCaptureDirectories(homeDirectory: homeDirectory)
@@ -1516,7 +1541,7 @@ final class AITokenUsageService: ObservableObject {
 
     // MARK: - Disk Usage & Cleanup
 
-    private nonisolated static func defaultStorageDirectories(
+    nonisolated static func defaultStorageDirectories(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> [AITokenUsageStorageDirectory] {
         let codexDirectories = [

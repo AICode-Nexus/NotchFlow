@@ -24,6 +24,7 @@ let package = Package(
                 .linkedFramework("ServiceManagement"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("WeatherKit"),
+                .linkedLibrary("sqlite3"),
             ]
         ),
         .systemLibrary(

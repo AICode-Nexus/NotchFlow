@@ -145,6 +145,38 @@ final class MediaAndSettingsRegressionTests: XCTestCase {
         )
     }
 
+    func testAIUsagePrivacyCopyMentionsZCode() throws {
+        let settingsSourceURL = packageRoot()
+            .appendingPathComponent("Sources/NotchFlow/UI/SettingsView.swift")
+        let source = try String(contentsOf: settingsSourceURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            source.contains("Codex、Claude、ZCode"),
+            "AI usage privacy copy should disclose the local ZCode metadata reader"
+        )
+    }
+
+    func testAIUsageSourceStripRendersAfterPositiveAndEmptyStates() throws {
+        let panelSourceURL = packageRoot()
+            .appendingPathComponent("Sources/NotchFlow/UI/NotchPanelView.swift")
+        let source = try String(contentsOf: panelSourceURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            source.contains(
+                """
+                            }
+
+                            Spacer(minLength: 6)
+
+                            aiTokenUsageSourceStrip
+                        }
+                    }
+                """
+            ),
+            "Codex 0 and GLM 0 must remain visible after either AI usage state"
+        )
+    }
+
     private func packageRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

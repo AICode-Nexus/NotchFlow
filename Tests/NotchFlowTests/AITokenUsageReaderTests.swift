@@ -481,6 +481,56 @@ final class AITokenUsageReaderTests: XCTestCase {
         XCTAssertEqual(claude.events, [])
     }
 
+    func testNotchSourceSummariesAlwaysUseCodexAndGLMWhileClaudeRemainsInTotal() {
+        let now = date("2026-06-12T12:00:00Z")
+        let summary = AITokenUsageAggregator.summary(
+            from: [
+                usageResult(sourceID: .codex, total: 10, timestamp: now),
+                usageResult(sourceID: .glm, total: 20, timestamp: now),
+                usageResult(sourceID: .claude, total: 1_000, timestamp: now),
+            ],
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(
+            summary.notchSourceSummaries(on: now, calendar: utcCalendar).map(\.id),
+            [.codex, .glm]
+        )
+        XCTAssertEqual(
+            summary.notchSourceSummaries(on: now, calendar: utcCalendar)
+                .map(\.breakdown.totalTokens),
+            [10, 20]
+        )
+        XCTAssertEqual(summary.todayTotal(on: now, calendar: utcCalendar), 1_030)
+    }
+
+    func testNotchSourceSummariesKeepZeroValueCardsVisible() {
+        let now = date("2026-06-12T12:00:00Z")
+
+        XCTAssertEqual(
+            AITokenUsageSummary.empty
+                .notchSourceSummaries(on: now, calendar: utcCalendar),
+            [
+                AITokenUsageSourceSummary(id: .codex, breakdown: .zero),
+                AITokenUsageSourceSummary(id: .glm, breakdown: .zero),
+            ]
+        )
+    }
+
+    @MainActor
+    func testDefaultReadersIncludeZCodeGLMExactlyOnce() {
+        let readers = AITokenUsageService.defaultReaders(
+            homeDirectory: URL(fileURLWithPath: "/tmp/notchflow-test-home", isDirectory: true)
+        )
+
+        XCTAssertEqual(readers.filter { $0.sourceID == .glm }.count, 1)
+        XCTAssertTrue(readers.contains { $0.sourceID == .claude })
+        XCTAssertEqual(
+            readers.prefix(3).map(\.sourceID),
+            [.codex, .glm, .claude]
+        )
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -489,6 +539,30 @@ final class AITokenUsageReaderTests: XCTestCase {
 
     private func date(_ isoString: String) -> Date {
         ISO8601DateFormatter.notchFlowInternetDate.date(from: isoString)!
+    }
+
+    private func usageResult(
+        sourceID: AITokenUsageSourceID,
+        total: Int,
+        timestamp: Date
+    ) -> AITokenUsageSourceReadResult {
+        AITokenUsageSourceReadResult(
+            sourceID: sourceID,
+            status: AITokenUsageSourceStatus(
+                id: sourceID,
+                state: .available,
+                message: "fixture"
+            ),
+            events: [
+                AITokenUsageEvent(
+                    sourceID: sourceID,
+                    timestamp: timestamp,
+                    breakdown: AITokenBreakdown(totalTokens: total),
+                    model: nil,
+                    stableID: "fixture-\(sourceID.rawValue)"
+                ),
+            ]
+        )
     }
 }
 

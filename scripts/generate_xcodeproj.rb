@@ -111,6 +111,7 @@ target.build_configurations.each do |config|
   settings['MARKETING_VERSION'] = '0.1.2'
   settings['CURRENT_PROJECT_VERSION'] = '3'
   settings['SWIFT_EMIT_LOC_STRINGS'] = 'NO'
+  settings['OTHER_LDFLAGS'] = '$(inherited) -lsqlite3'
 end
 
 project.recreate_user_schemes

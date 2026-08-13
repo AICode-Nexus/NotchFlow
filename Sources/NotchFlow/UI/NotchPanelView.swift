@@ -1186,9 +1186,6 @@ struct NotchPanelView: View {
                     }
                 }
 
-                Spacer(minLength: 6)
-
-                aiTokenUsageSourceStrip
             } else {
                 VStack(alignment: .leading, spacing: 5) {
                     Spacer(minLength: 0)
@@ -1212,12 +1209,16 @@ struct NotchPanelView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            Spacer(minLength: 6)
+
+            aiTokenUsageSourceStrip
         }
     }
 
     private var aiTokenUsageSourceStrip: some View {
         HStack(spacing: 6) {
-            ForEach(Array(aiTokenUsage.summary.sourceSummaries(on: Date()).prefix(2))) { source in
+            ForEach(aiTokenUsage.summary.notchSourceSummaries(on: Date())) { source in
                 HStack(spacing: 4) {
                     Text(source.displayName)
                         .font(panelFont(11, weight: .semibold))

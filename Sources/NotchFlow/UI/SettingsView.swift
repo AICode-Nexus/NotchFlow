@@ -584,7 +584,7 @@ struct SettingsView: View {
         Section("本机 AI token") {
             Toggle("显示 AI 用量", isOn: $settings.aiTokenUsageEnabled)
 
-            Text("开启后仅在本机读取 Codex、Claude 等工具日志中的 usage/token 元数据，不读取对话正文，不上传网络。")
+            Text("开启后仅在本机读取 Codex、Claude、ZCode 等工具日志中的 usage/token 元数据，不读取对话正文，不上传网络。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

@@ -3,6 +3,14 @@ import Foundation
 import XCTest
 
 final class AITokenStorageManagementTests: XCTestCase {
+    func testDefaultStorageManagementNeverIncludesZCodeDatabase() {
+        let home = URL(fileURLWithPath: "/tmp/notchflow-storage-home", isDirectory: true)
+        let directories = AITokenUsageService.defaultStorageDirectories(homeDirectory: home)
+
+        XCTAssertFalse(directories.contains { $0.sourceID == .glm })
+        XCTAssertFalse(directories.contains { $0.url.path.contains("/.zcode/") })
+    }
+
     @MainActor
     func testSettingsViewDirectlyObservesRetentionAndUsageState() {
         let view = SettingsView(model: .shared)
